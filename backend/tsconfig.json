@@ -3,7 +3,8 @@
     "target": "ES2022",
     "module": "CommonJS",
     "moduleResolution": "node",
-    "outDir": "./dist",
+    "outDir": "dist",
+    "rootDir": ".",
     "strict": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -11,13 +12,20 @@
     "lib": ["ES2022"],
     "noImplicitAny": false,
     "types": [],
-    "noEmitOnError": false
+    "noEmitOnError": false,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
   },
   "include": [
-    "src/**/*"
+    "src"
   ],
   "exclude": [
     "node_modules",
-    "../database"
-  ]
+    "dist"
+  ],
+  "ts-node": {
+    "esm": false,
+    "transpileOnly": true
+  }
 }
