@@ -1,0 +1,352 @@
+import { db } from "@voting/database";
+import { candidateRequests } from "../../../database/schema/candidateRequests";
+import { elections } from "../../../database/schema/elections";
+import { users } from "../../../database/schema/users";
+import { eq, and, lt, desc } from "drizzle-orm";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { env } from "../config/env";
+import { BadRequestError, UnauthorizedError } from "../lib/errors";
+import { addCandidate } from "./election.service";
+
+export const candidateRequestService = {
+  async createRequest(electionId: string, userId: string, nominationDeadline: Date) {
+    const result = await db.insert(candidateRequests).values({
+      electionId,
+      userId,
+      // Every nominee in an election shares the election-wide deadline.
+      expiresAt: nominationDeadline,
+    }).returning();
+
+    return result[0];
+  },
+
+  /**
+   * Fetch a single raw request row by ID (no join).
+   * Used by routes to run ownership and status checks before accepting/rejecting.
+   */
+  async getRawRequest(requestId: string) {
+    return db
+      .select()
+      .from(candidateRequests)
+      .where(eq(candidateRequests.id, requestId));
+  },
+
+  /**
+   * Accept a nomination request.
+   * Callers (routes) must validate ownership and expiry BEFORE calling this —
+   * here we only enforce the status invariant as a last-line-of-defence guard.
+   */
+  async acceptRequest(requestId: string) {
+    const [request] = await db
+      .select()
+      .from(candidateRequests)
+      .where(eq(candidateRequests.id, requestId));
+
+    if (!request) throw new Error("Request not found");
+
+    if (request.status !== "pending") {
+      throw new Error(
+        request.status === "accepted"
+          ? "This nomination has already been accepted"
+          : request.status === "rejected"
+          ? "This nomination has already been declined"
+          : "This nomination has expired"
+      );
+    }
+
+    const [election] = await db
+      .select({ nominationDeadline: elections.nominationDeadline })
+      .from(elections)
+      .where(eq(elections.id, request.electionId));
+    const sharedDeadline = election?.nominationDeadline;
+    if (!sharedDeadline || sharedDeadline <= new Date()) {
+      // Auto-expire and refuse
+      await db
+        .update(candidateRequests)
+        .set({ status: "expired", updatedAt: new Date() })
+        .where(eq(candidateRequests.id, requestId));
+      throw new Error("The shared nomination deadline has passed");
+    }
+
+    const [updated] = await db
+      .update(candidateRequests)
+      .set({
+        status: "accepted",
+        respondedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(candidateRequests.id, requestId))
+      .returning();
+
+    return updated;
+  },
+
+  async createAcceptAuthToken(userId: string, requestId: string, pin: string) {
+    const [request] = await db
+      .select()
+      .from(candidateRequests)
+      .where(and(eq(candidateRequests.id, requestId), eq(candidateRequests.userId, userId)));
+    if (!request) throw new UnauthorizedError("Nomination request not found");
+    if (request.status !== "pending") throw new BadRequestError("This nomination is no longer pending");
+    const [election] = await db
+      .select({ nominationDeadline: elections.nominationDeadline })
+      .from(elections)
+      .where(eq(elections.id, request.electionId));
+    if (!election?.nominationDeadline || election.nominationDeadline <= new Date()) {
+      await this.expireRequest(requestId);
+      throw new BadRequestError("The shared nomination deadline has passed");
+    }
+
+    const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+    if (!user?.loginPinHash) {
+      throw new BadRequestError("Login PIN is not set up. Use biometric authentication instead.");
+    }
+    if (!(await bcrypt.compare(pin.trim(), user.loginPinHash))) {
+      throw new UnauthorizedError("Incorrect Login PIN");
+    }
+
+    return jwt.sign(
+      { userId, requestId, purpose: "candidate-accept" },
+      env.JWT_SECRET,
+      { expiresIn: "5m" }
+    );
+  },
+
+  verifyAcceptAuthToken(token: string, userId: string, requestId: string) {
+    try {
+      const payload = jwt.verify(token, env.JWT_SECRET) as {
+        userId: string;
+        requestId: string;
+        purpose: string;
+      };
+      if (
+        payload.purpose !== "candidate-accept" ||
+        payload.userId !== userId ||
+        payload.requestId !== requestId
+      ) {
+        throw new Error("wrong token");
+      }
+    } catch {
+      throw new UnauthorizedError("Candidate acceptance authentication expired. Please try again.");
+    }
+  },
+
+  /**
+   * Reject / decline a nomination request.
+   * Callers must validate ownership before calling this.
+   */
+  async rejectRequest(requestId: string) {
+    const [request] = await db
+      .select()
+      .from(candidateRequests)
+      .where(eq(candidateRequests.id, requestId));
+
+    if (!request) throw new Error("Request not found");
+
+    if (request.status !== "pending") {
+      throw new Error(
+        request.status === "accepted"
+          ? "This nomination has already been accepted"
+          : request.status === "rejected"
+          ? "This nomination has already been declined"
+          : "This nomination has expired and cannot be declined"
+      );
+    }
+
+    const [updated] = await db
+      .update(candidateRequests)
+      .set({
+        status: "rejected",
+        respondedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(candidateRequests.id, requestId))
+      .returning();
+
+    return updated;
+  },
+
+  async expireRequest(requestId: string) {
+    await db
+      .update(candidateRequests)
+      .set({
+        status: "expired",
+        updatedAt: new Date(),
+      })
+      .where(eq(candidateRequests.id, requestId));
+  },
+
+  /**
+   * Returns all requests for the user (pending + responded history), joined
+   * with the election title so the frontend can display it without a second
+   * round-trip.
+   */
+  async getRequestsForUser(userId: string) {
+    const rows = await db
+      .select({
+        id: candidateRequests.id,
+        electionId: candidateRequests.electionId,
+        electionTitle: elections.title,
+        electionDescription: elections.description,
+        status: candidateRequests.status,
+        expiresAt: elections.nominationDeadline,
+        respondedAt: candidateRequests.respondedAt,
+        profileCompletedAt: candidateRequests.profileCompletedAt,
+        createdAt: candidateRequests.createdAt,
+      })
+      .from(candidateRequests)
+      .leftJoin(elections, eq(candidateRequests.electionId, elections.id))
+      .where(eq(candidateRequests.userId, userId));
+
+    return rows.map((r) => ({
+      ...r,
+      electionTitle: r.electionTitle ?? "Unknown election",
+      nominatedByName: "Election administrator",
+      profileCompleted: Boolean(r.profileCompletedAt),
+    }));
+  },
+
+  /** @deprecated Use getRequestsForUser — returns all statuses with election title */
+  async getPendingRequests(userId: string) {
+    return this.getRequestsForUser(userId);
+  },
+
+  async getElectionRequests(electionId: string) {
+    return db
+      .select({
+        id: candidateRequests.id,
+        electionId: candidateRequests.electionId,
+        userId: candidateRequests.userId,
+        candidateName: users.fullName,
+        candidatePhotoUrl: users.profilePhotoUrl,
+        candidateWalletLinked: users.walletAddress,
+        status: candidateRequests.status,
+        expiresAt: elections.nominationDeadline,
+        respondedAt: candidateRequests.respondedAt,
+        profileCompletedAt: candidateRequests.profileCompletedAt,
+        createdAt: candidateRequests.createdAt,
+      })
+      .from(candidateRequests)
+      .leftJoin(users, eq(candidateRequests.userId, users.id))
+      .leftJoin(elections, eq(candidateRequests.electionId, elections.id))
+      .where(eq(candidateRequests.electionId, electionId));
+  },
+
+  /** Admin-only overview used by the shared Requests page. */
+  async getAllRequestsForAdmin() {
+    const rows = await db
+      .select({
+        id: candidateRequests.id,
+        electionId: candidateRequests.electionId,
+        electionTitle: elections.title,
+        electionDescription: elections.description,
+        userId: candidateRequests.userId,
+        candidateName: users.fullName,
+        candidatePhotoUrl: users.profilePhotoUrl,
+        candidateWalletLinked: users.walletAddress,
+        status: candidateRequests.status,
+        expiresAt: elections.nominationDeadline,
+        respondedAt: candidateRequests.respondedAt,
+        profileCompletedAt: candidateRequests.profileCompletedAt,
+        createdAt: candidateRequests.createdAt,
+        electionStatus: elections.status,
+      })
+      .from(candidateRequests)
+      .leftJoin(elections, eq(candidateRequests.electionId, elections.id))
+      .leftJoin(users, eq(candidateRequests.userId, users.id))
+      .orderBy(desc(candidateRequests.createdAt));
+
+    return rows.map((row) => ({
+      ...row,
+      electionTitle: row.electionTitle ?? "Unknown election",
+      candidateName: row.candidateName ?? "Unknown voter",
+      candidateWalletLinked: Boolean(row.candidateWalletLinked),
+      profileCompleted: Boolean(row.profileCompletedAt),
+    }));
+  },
+
+  async markProfileCompleted(requestId: string) {
+    const [updated] = await db
+      .update(candidateRequests)
+      .set({ profileCompletedAt: new Date(), updatedAt: new Date() })
+      .where(eq(candidateRequests.id, requestId))
+      .returning();
+    return updated;
+  },
+
+  async completeCandidateProfile(
+    requestId: string,
+    userId: string,
+    profile: {
+      party: string;
+      photoUrl: string;
+      bio: string;
+      qualification: string;
+      supports: string;
+    }
+  ) {
+    const [request] = await db
+      .select()
+      .from(candidateRequests)
+      .where(and(eq(candidateRequests.id, requestId), eq(candidateRequests.userId, userId)));
+    if (!request) throw new UnauthorizedError("Nomination request not found");
+    if (request.status !== "accepted") {
+      throw new BadRequestError("Accept the nomination before completing your candidate profile");
+    }
+    if (request.profileCompletedAt) {
+      throw new BadRequestError("Your candidate profile has already been submitted");
+    }
+
+    const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+    if (!user) throw new UnauthorizedError("User not found");
+
+    const candidate = await addCandidate(
+      request.electionId,
+      {
+        name: user.fullName,
+        voterUserId: userId,
+        party: profile.party,
+        photoUrl: profile.photoUrl,
+        bio: profile.bio,
+        qualification: profile.qualification,
+        supports: profile.supports,
+      },
+      userId
+    );
+
+    await this.markProfileCompleted(requestId);
+    return candidate;
+  },
+
+  /** Bulk-expire all pending requests whose deadline has passed. Called by scheduler. */
+  async expireOutdatedRequests() {
+    const now = new Date();
+    await db
+      .update(candidateRequests)
+      .set({
+        status: "expired",
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(candidateRequests.status, "pending"),
+          lt(candidateRequests.expiresAt, now)
+        )
+      );
+  },
+
+  async getAcceptedCandidateCount(electionId: string) {
+    const result = await db
+      .select()
+      .from(candidateRequests)
+      .where(
+        and(
+          eq(candidateRequests.electionId, electionId),
+          eq(candidateRequests.status, "accepted")
+        )
+      );
+
+    return result.length;
+  },
+};

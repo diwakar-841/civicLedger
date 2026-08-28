@@ -1,0 +1,433 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+/* =========================================================
+   BASE
+   ========================================================= */
+
+@layer base {
+  html {
+    @apply antialiased;
+    background: #f7f8fc;
+  }
+
+  body {
+    @apply bg-navy-50 text-navy-900 font-sans transition-colors duration-200;
+
+    min-width: 320px;
+
+    font-family:
+      "DM Sans",
+      ui-sans-serif,
+      system-ui,
+      sans-serif;
+
+    background-image:
+      radial-gradient(
+        circle at 10% -10%,
+        rgba(91, 95, 239, 0.08),
+        transparent 28rem
+      ),
+      radial-gradient(
+        circle at 100% 0%,
+        rgba(37, 211, 190, 0.07),
+        transparent 24rem
+      );
+  }
+
+  .dark body {
+    @apply bg-navy-950 text-navy-100;
+  }
+
+  .dark {
+    color-scheme: dark;
+  }
+
+  button,
+  a,
+  input,
+  textarea,
+  select {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  ::selection {
+    @apply bg-gold-300/60 text-navy-950;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family:
+      "Plus Jakarta Sans",
+      "DM Sans",
+      sans-serif;
+
+    letter-spacing: -0.025em;
+  }
+}
+
+
+/* =========================================================
+   CUSTOM UTILITIES
+   ========================================================= */
+
+@layer utilities {
+  .focus-ring {
+    @apply outline-none
+      focus-visible:ring-2
+      focus-visible:ring-gold-400
+      focus-visible:ring-offset-2
+      focus-visible:ring-offset-navy-50;
+  }
+
+  .dark .focus-ring {
+    @apply focus-visible:ring-offset-navy-950;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .bottom-nav-item {
+    @apply flex
+      min-w-[3.75rem]
+      flex-col
+      items-center
+      gap-1
+      rounded-2xl
+      px-2
+      py-1.5
+      text-[10px]
+      font-bold
+      text-navy-400
+      transition;
+  }
+
+  .bottom-nav-item:hover {
+    @apply bg-indigo-50 text-indigo-700;
+  }
+
+  .bottom-nav-active {
+    @apply text-indigo-600;
+  }
+
+  .bottom-nav-active svg {
+    stroke-width: 2.5;
+  }
+
+  .bottom-nav-create {
+    @apply flex
+      h-12
+      w-12
+      items-center
+      justify-center
+      rounded-full
+      bg-indigo-600
+      text-white
+      shadow-lg
+      shadow-indigo-600/30
+      transition
+      duration-200;
+  }
+
+  /* Auth pages share the light, airy treatment
+     of the sign-in screen. */
+
+  .auth-light .bg-navy-900\/50 {
+    background-color: rgba(255, 255, 255, 0.78);
+  }
+
+  .auth-light .border-navy-700 {
+    border-color: #d7deef;
+  }
+
+  .auth-light .text-navy-300 {
+    color: #5c6fac;
+  }
+
+  .auth-light .text-navy-400 {
+    color: #5c6fac;
+  }
+
+  .auth-light .text-navy-500 {
+    color: #3d5091;
+  }
+
+  .auth-light .bg-navy-700 {
+    background-color: #eef1f8;
+  }
+}
+
+
+/* =========================================================
+   DARK MODE OVERRIDES
+   IMPORTANT:
+   These are intentionally OUTSIDE @layer utilities.
+   This prevents Tailwind circular dependency errors.
+   ========================================================= */
+
+/* ---------------------------------------------------------
+   Navy text
+   --------------------------------------------------------- */
+
+.dark .text-navy-900 {
+  color: #f8fafc !important;
+}
+
+.dark .text-navy-800 {
+  color: #f1f5f9 !important;
+}
+
+.dark .text-navy-700 {
+  color: #e2e8f0 !important;
+}
+
+.dark .text-navy-600 {
+  color: #cbd5e1 !important;
+}
+
+.dark .text-navy-500 {
+  color: #a9b4cd !important;
+}
+
+
+/* ---------------------------------------------------------
+   Navy borders
+   --------------------------------------------------------- */
+
+.dark .border-navy-100 {
+  border-color: #273354 !important;
+}
+
+.dark .border-navy-200 {
+  border-color: #2d3a5e !important;
+}
+
+.dark .border-navy-300 {
+  border-color: #35446c !important;
+}
+
+
+/* ---------------------------------------------------------
+   White surfaces
+   --------------------------------------------------------- */
+
+.dark .bg-white,
+.dark .bg-white\/70,
+.dark .bg-white\/80,
+.dark .bg-white\/60 {
+  background-color: #131a2e !important;
+}
+
+
+/* ---------------------------------------------------------
+   Navy surfaces
+   --------------------------------------------------------- */
+
+.dark .bg-navy-50,
+.dark .bg-navy-100 {
+  background-color: #1a2238 !important;
+}
+
+.dark .bg-slate-50 {
+  background-color: #1a2238 !important;
+}
+
+
+/* ---------------------------------------------------------
+   Blue surfaces
+   --------------------------------------------------------- */
+
+.dark .bg-blue-50 {
+  background-color: rgba(59, 130, 246, 0.14) !important;
+}
+
+.dark .bg-blue-100 {
+  background-color: rgba(59, 130, 246, 0.22) !important;
+}
+
+
+/* ---------------------------------------------------------
+   Indigo surfaces
+   --------------------------------------------------------- */
+
+.dark .bg-indigo-50,
+.dark .bg-indigo-50\/60 {
+  background-color: rgba(99, 102, 241, 0.16) !important;
+}
+
+
+/* ---------------------------------------------------------
+   Emerald surfaces
+   --------------------------------------------------------- */
+
+.dark .bg-emerald-50 {
+  background-color: rgba(16, 185, 129, 0.14) !important;
+}
+
+.dark .bg-emerald-100 {
+  background-color: rgba(16, 185, 129, 0.22) !important;
+}
+
+
+/* ---------------------------------------------------------
+   Red / Rose surfaces
+   --------------------------------------------------------- */
+
+.dark .bg-red-50,
+.dark .bg-rose-50 {
+  background-color: rgba(239, 68, 68, 0.14) !important;
+}
+
+.dark .bg-red-100 {
+  background-color: rgba(239, 68, 68, 0.22) !important;
+}
+
+
+/* ---------------------------------------------------------
+   Amber / Gold surfaces
+   --------------------------------------------------------- */
+
+.dark .bg-amber-50,
+.dark .bg-gold-50 {
+  background-color: rgba(234, 179, 8, 0.14) !important;
+}
+
+.dark .bg-amber-100,
+.dark .bg-gold-100 {
+  background-color: rgba(234, 179, 8, 0.22) !important;
+}
+
+
+/* ---------------------------------------------------------
+   Teal surfaces
+   --------------------------------------------------------- */
+
+.dark .bg-teal-100 {
+  background-color: rgba(20, 184, 166, 0.22) !important;
+}
+
+
+/* ---------------------------------------------------------
+   Blue text
+   --------------------------------------------------------- */
+
+.dark .text-blue-700,
+.dark .text-blue-800,
+.dark .text-blue-900 {
+  color: #a5c9ff !important;
+}
+
+
+/* ---------------------------------------------------------
+   Indigo text
+   --------------------------------------------------------- */
+
+.dark .text-indigo-600,
+.dark .text-indigo-700 {
+  color: #a5b4fc !important;
+}
+
+
+/* ---------------------------------------------------------
+   Emerald text
+   --------------------------------------------------------- */
+
+.dark .text-emerald-700,
+.dark .text-emerald-800 {
+  color: #6ee7b7 !important;
+}
+
+
+/* ---------------------------------------------------------
+   Red text
+   --------------------------------------------------------- */
+
+.dark .text-red-600,
+.dark .text-red-700,
+.dark .text-red-800 {
+  color: #fca5a5 !important;
+}
+
+
+/* ---------------------------------------------------------
+   Amber / Gold text
+   --------------------------------------------------------- */
+
+.dark .text-amber-700,
+.dark .text-amber-800,
+.dark .text-gold-700,
+.dark .text-gold-800 {
+  color: #fbd669 !important;
+}
+
+
+/* ---------------------------------------------------------
+   Teal text
+   --------------------------------------------------------- */
+
+.dark .text-teal-800 {
+  color: #99f6e4 !important;
+}
+
+
+/* =========================================================
+   SOLID NAVY BUTTONS
+   ========================================================= */
+
+/*
+  IMPORTANT:
+  Do NOT use @apply here.
+
+  These selectors intentionally override Tailwind's generated
+  bg-navy-* utilities in dark mode.
+*/
+
+.dark [class~="bg-navy-900"],
+.dark [class~="bg-navy-800"],
+.dark [class~="bg-navy-950"] {
+  background-color: #0b1120 !important;
+}
+
+
+/* ---------------------------------------------------------
+   White labels on navy buttons
+   --------------------------------------------------------- */
+
+.dark .bg-navy-900.text-white,
+.dark .bg-navy-900 .text-white,
+.dark .text-white {
+  color: #ffffff !important;
+}
+
+
+/* =========================================================
+   COMPONENTS
+   ========================================================= */
+
+@layer components {
+  .surface {
+    @apply border
+      border-navy-100/80
+      bg-white
+      shadow-card
+      dark:border-navy-800
+      dark:bg-navy-900;
+  }
+
+  .eyebrow {
+    @apply text-[11px]
+      font-bold
+      uppercase
+      tracking-[0.16em]
+      text-navy-400;
+  }
+}

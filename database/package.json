@@ -1,0 +1,22 @@
+{
+  "name": "@voting/database",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.ts",
+  "types": "index.ts",
+  "scripts": {
+    "fix-db": "psql $DATABASE_URL -f fix-push-prompts.sql",
+    "push": "drizzle-kit push",
+    "push:force": "drizzle-kit push --force",
+    "studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.2",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.0",
+    "drizzle-kit": "^0.31.10",
+    "typescript": "^5.6.0"
+  }
+}

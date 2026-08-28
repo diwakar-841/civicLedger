@@ -1,0 +1,15 @@
+{
+  "name": "blockchain",
+  "version": "1.0.0",
+  "description": "Termux-compatible Solidity compile/deploy pipeline (no Hardhat, no native N-API modules).",
+  "scripts": {
+    "compile": "node compile.js",
+    "deploy": "node deploy.js",
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "solc": "^0.8.28",
+    "ethers": "^6.13.0",
+    "dotenv": "^16.4.0"
+  }
+}
