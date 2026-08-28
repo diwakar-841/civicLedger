@@ -34,17 +34,16 @@ import type {
 } from "@simplewebauthn/server";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
-import { db, users, webauthnCredentials } from "@voting/database";
+import { db, users, webauthnCredentials, candidateRequests } from "@voting/database";
 import { eq } from "drizzle-orm";
 import { env } from "../config/env";
 import { BadRequestError, UnauthorizedError } from "../lib/errors";
 import { createSession } from "./session.service";
 import { recordAudit } from "../lib/audit";
-import { candidateRequests } from "../../../database/schema/candidateRequests";
 import { and } from "drizzle-orm";
 import { candidateRequestService } from "./candidateRequest.service";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────�[...]
 
 function mapUser(user: typeof users.$inferSelect) {
   return {
