@@ -78,13 +78,13 @@ export async function getRegistrationOptions(setupToken: string) {
   }
   if (payload.purpose !== "biometric-setup") throw new UnauthorizedError("Invalid token");
 
-  const user = await db.query.users.findFirst({ where: eq(users.id, payload.userId) });
+  const user = await db.query.users.findFirst({ where: eq((users as any).id, payload.userId) });
   if (!user) throw new UnauthorizedError("User not found");
 
   // Exclude credentials already registered so the authenticator creates a
   // fresh key pair if this endpoint is called again (e.g. re-registration).
   const existing = await db.query.webauthnCredentials.findMany({
-    where: eq(webauthnCredentials.userId, user.id),
+    where: eq((webauthnCredentials as any).userId, user.id),
   });
 
   const options = await generateRegistrationOptions({
@@ -109,7 +109,7 @@ export async function getRegistrationOptions(setupToken: string) {
   });
 
   // Persist challenge so we can verify the response in completeRegistration
-  await db.update(users).set({ webauthnChallenge: options.challenge }).where(eq(users.id, user.id));
+  await db.update(users).set({ webauthnChallenge: options.challenge as unknown as string }).where(eq((users as any).id, user.id));
 
   return options;
 }
@@ -139,7 +139,7 @@ export async function completeRegistration(
   }
   if (payload.purpose !== "biometric-setup") throw new UnauthorizedError("Invalid token");
 
-  const user = await db.query.users.findFirst({ where: eq(users.id, payload.userId) });
+  const user = await db.query.users.findFirst({ where: eq((users as any).id, payload.userId) });
   if (!user || !user.webauthnChallenge) throw new UnauthorizedError("No pending registration challenge — please restart");
 
   const verification = await verifyRegistrationResponse({
@@ -159,7 +159,7 @@ export async function completeRegistration(
 
   // Delete any stale credentials for this user before inserting the new one
   // so re-registration doesn't accumulate orphan rows.
-  await db.delete(webauthnCredentials).where(eq(webauthnCredentials.userId, user.id));
+  await db.delete(webauthnCredentials).where(eq((webauthnCredentials as any).userId, user.id));
 
   // Store the new credential
   await db.insert(webauthnCredentials).values({
@@ -175,7 +175,7 @@ export async function completeRegistration(
   await db
     .update(users)
     .set({ isBiometricRegistered: true, webauthnChallenge: null })
-    .where(eq(users.id, user.id));
+    .where(eq((users as any).id, user.id));
 
   // FIX: capture rawToken so the controller can set the httpOnly refresh cookie
   const { rawToken } = await createSession({ userId: user.id, userAgent: "biometric-setup" });
@@ -184,19 +184,19 @@ export async function completeRegistration(
 
   recordAudit(user.id, "BIOMETRIC_REGISTERED").catch(() => {});
 
-  const fresh = await db.query.users.findFirst({ where: eq(users.id, user.id) });
+  const fresh = await db.query.users.findFirst({ where: eq((users as any).id, user.id) });
   return { rawToken, accessToken, user: mapUser(fresh!) };
 }
 
 // ─── Vote authentication — biometric ─────────────────────────────────────────
 
 export async function getAuthenticationOptions(userId: string) {
-  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  const user = await db.query.users.findFirst({ where: eq((users as any).id, userId) });
   if (!user) throw new UnauthorizedError("User not found");
   if (!user.isBiometricRegistered) throw new BadRequestError("Biometric not set up");
 
   const userCreds = await db.query.webauthnCredentials.findMany({
-    where: eq(webauthnCredentials.userId, userId),
+    where: eq((webauthnCredentials as any).userId, userId),
   });
   if (userCreds.length === 0) throw new BadRequestError("No credentials found — please re-register biometrics");
 
@@ -204,12 +204,12 @@ export async function getAuthenticationOptions(userId: string) {
     rpID: env.WEBAUTHN_RP_ID,
     userVerification: "required",
     allowCredentials: userCreds.map((c) => ({
-      id: c.credentialId,
+      id: (c.credentialId as unknown) as string,
       transports: (c.transports ?? []) as AuthenticatorTransportFuture[],
     })),
   });
 
-  await db.update(users).set({ webauthnChallenge: options.challenge }).where(eq(users.id, userId));
+  await db.update(users).set({ webauthnChallenge: options.challenge as unknown as string }).where(eq((users as any).id, userId));
   return options;
 }
 
@@ -217,11 +217,11 @@ export async function verifyVoteAuth(
   userId: string,
   credential: AuthenticationResponseJSON
 ): Promise<{ voteToken: string }> {
-  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  const user = await db.query.users.findFirst({ where: eq((users as any).id, userId) });
   if (!user || !user.webauthnChallenge) throw new UnauthorizedError("Not authenticated");
 
   const userCreds = await db.query.webauthnCredentials.findMany({
-    where: eq(webauthnCredentials.userId, userId),
+    where: eq((webauthnCredentials as any).userId, userId),
   });
   const stored = userCreds.find((c) => c.credentialId === credential.id);
   if (!stored) throw new UnauthorizedError("Unrecognized credential");
@@ -246,8 +246,8 @@ export async function verifyVoteAuth(
   await db
     .update(webauthnCredentials)
     .set({ counter: verification.authenticationInfo.newCounter })
-    .where(eq(webauthnCredentials.id, stored.id));
-  await db.update(users).set({ webauthnChallenge: null }).where(eq(users.id, userId));
+    .where(eq((webauthnCredentials as any).id, stored.id));
+  await db.update(users).set({ webauthnChallenge: null }).where(eq((users as any).id, userId));
 
   // Short-lived vote token (2 minutes)
   const voteToken = jwt.sign(
@@ -269,7 +269,7 @@ export async function verifyVotePinAuth(
   userId: string,
   pin: string
 ): Promise<{ voteToken: string }> {
-  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  const user = await db.query.users.findFirst({ where: eq((users as any).id, userId) });
   if (!user) throw new UnauthorizedError("User not found");
 
   // Support both the new votingPinHash column and the legacy pinHash column
@@ -320,13 +320,13 @@ export async function verifyLoginBiometric(
   }
   if (payload.purpose !== "login-bio") throw new UnauthorizedError("Invalid token purpose");
 
-  const user = await db.query.users.findFirst({ where: eq(users.id, payload.userId) });
+  const user = await db.query.users.findFirst({ where: eq((users as any).id, payload.userId) });
   if (!user) throw new UnauthorizedError("User not found");
   if (!user.webauthnChallenge) throw new UnauthorizedError("No authentication challenge found — restart login");
 
   // Find the matching stored credential
   const userCreds = await db.query.webauthnCredentials.findMany({
-    where: eq(webauthnCredentials.userId, user.id),
+    where: eq((webauthnCredentials as any).userId, user.id),
   });
   if (userCreds.length === 0) throw new UnauthorizedError("No biometric credentials registered — please contact support");
 
@@ -354,8 +354,8 @@ export async function verifyLoginBiometric(
   await db
     .update(webauthnCredentials)
     .set({ counter: verification.authenticationInfo.newCounter })
-    .where(eq(webauthnCredentials.id, stored.id));
-  await db.update(users).set({ webauthnChallenge: null }).where(eq(users.id, user.id));
+    .where(eq((webauthnCredentials as any).id, stored.id));
+  await db.update(users).set({ webauthnChallenge: null }).where(eq((users as any).id, user.id));
 
   // FIX: capture rawToken so the controller can set the httpOnly refresh cookie
   const { rawToken } = await createSession({ userId: user.id, userAgent, ipAddress });
@@ -365,7 +365,7 @@ export async function verifyLoginBiometric(
   // Fire-and-forget audit
   recordAudit(user.id, "BIOMETRIC_LOGIN", undefined, undefined, ipAddress).catch(() => {});
 
-  const fresh = await db.query.users.findFirst({ where: eq(users.id, user.id) });
+  const fresh = await db.query.users.findFirst({ where: eq((users as any).id, user.id) });
   return { rawToken, accessToken, user: mapUser(fresh!) };
 }
 
@@ -376,7 +376,7 @@ export async function getCandidateRequestAuthenticationOptions(
   const [request] = await db
     .select()
     .from(candidateRequests)
-    .where(and(eq(candidateRequests.id, requestId), eq(candidateRequests.userId, userId)));
+    .where(and(eq((candidateRequests as any).id, requestId), eq((candidateRequests as any).userId, userId)));
   if (!request) throw new UnauthorizedError("Nomination request not found");
   if (request.status !== "pending") throw new BadRequestError("This nomination is no longer pending");
   if (request.expiresAt < new Date()) {
@@ -391,11 +391,11 @@ export async function verifyCandidateRequestAuthentication(
   requestId: string,
   credential: AuthenticationResponseJSON
 ) {
-  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  const user = await db.query.users.findFirst({ where: eq((users as any).id, userId) });
   if (!user || !user.webauthnChallenge) throw new UnauthorizedError("Authentication challenge expired");
 
   const userCreds = await db.query.webauthnCredentials.findMany({
-    where: eq(webauthnCredentials.userId, userId),
+    where: eq((webauthnCredentials as any).userId, userId),
   });
   const stored = userCreds.find((c) => c.credentialId === credential.id);
   if (!stored) throw new UnauthorizedError("Unrecognized biometric credential");
@@ -418,13 +418,13 @@ export async function verifyCandidateRequestAuthentication(
   await db
     .update(webauthnCredentials)
     .set({ counter: verification.authenticationInfo.newCounter })
-    .where(eq(webauthnCredentials.id, stored.id));
-  await db.update(users).set({ webauthnChallenge: null }).where(eq(users.id, userId));
+    .where(eq((webauthnCredentials as any).id, stored.id));
+  await db.update(users).set({ webauthnChallenge: null }).where(eq((users as any).id, userId));
 
   const [request] = await db
     .select()
     .from(candidateRequests)
-    .where(and(eq(candidateRequests.id, requestId), eq(candidateRequests.userId, userId)));
+    .where(and(eq((candidateRequests as any).id, requestId), eq((candidateRequests as any).userId, userId)));
   if (!request || request.status !== "pending" || request.expiresAt < new Date()) {
     throw new BadRequestError("This nomination is no longer available");
   }
