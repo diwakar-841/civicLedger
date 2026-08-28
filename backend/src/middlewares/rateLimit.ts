@@ -1,5 +1,6 @@
 import rateLimit from "express-rate-limit";
 import slowDown from "express-slow-down";
+import { RequestHandler } from "express";
 
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -9,7 +10,7 @@ export const authLimiter = rateLimit({
   message: { error: "Too many attempts. Please try again in a few minutes." },
 });
 
-export const authSlowDown = slowDown({
+export const authSlowDown: RequestHandler = slowDown({
   windowMs: 15 * 60 * 1000,
   delayAfter: 3,
   delayMs: (hits) => hits * 500,
