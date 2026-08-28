@@ -9,7 +9,7 @@
   "dependencies": {
     "@voting/database": "file:../database",
     "@simplewebauthn/server": "^13.3.2",
-    "bcrypt": "^6.0.0",
+    "bcrypt": "npm:bcryptjs@2.4.3",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",

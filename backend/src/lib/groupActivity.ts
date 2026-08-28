@@ -58,8 +58,8 @@ export async function logGroupActivity(entry: {
     `);
   } catch (err) {
     // History must never break the action it describes.
-    logger.error({ err }, "Could not record group activity");
-  }
+    logger.error("Could not record group activity", { err });
+}
 }
 
 /** Convenience: resolve a user's display name/email for the activity row. */
