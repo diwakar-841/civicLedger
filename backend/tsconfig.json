@@ -4,19 +4,20 @@
     "module": "CommonJS",
     "moduleResolution": "node",
     "outDir": "./dist",
-    "rootDir": "./src",
     "strict": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "lib": ["ES2022"],
     "noImplicitAny": false,
-    "types": []
+    "types": [],
+    "noEmitOnError": false
   },
   "include": [
     "src/**/*"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "../database"
   ]
 }
