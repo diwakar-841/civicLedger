@@ -24,8 +24,15 @@ export function setAccessToken(token: string | null) {
   }
 }
 
+// In local dev, Vite's proxy (see vite.config.ts) forwards "/api" to the
+// backend on 127.0.0.1:5000, so a relative path works. In production there
+// is no such proxy — the frontend is a static build with no server behind
+// it — so we need the real backend origin. Set VITE_API_URL on whatever
+// platform hosts the frontend (e.g. https://civic-ledger-g51u.onrender.com/api).
+const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
+
 export const apiClient = axios.create({
-  baseURL: "/api",
+  baseURL: API_BASE_URL,
   withCredentials: true,
   // FIX: increased from 15 s to 30 s.
   // Email-sending endpoints (identity verify, resend OTP) now fire-and-forget
