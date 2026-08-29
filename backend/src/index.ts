@@ -32,20 +32,26 @@ const server = app.listen(env.PORT, () => {
   );
   runGroupMigrations().catch((err) => logger.error("runGroupMigrations failed", { error: String(err) }));
 
-  // In development, auto-fund the deployer wallet and warn if the contract
-  // address is still the zero address.
-  fundDeployerIfNeeded().catch((err) =>
-    logger.error("fundDeployerIfNeeded failed unexpectedly", { error: String(err) })
-  );
+  // Blockchain-related startup tasks (indexer, reconciliation, dev auto-funding).
+  // Allow disabling these when no RPC/node is available (e.g. in hosted envs).
+  if (env.SKIP_INDEXER) {
+    logger.info("SKIP_INDEXER=true — skipping blockchain indexer, reconciliation, and auto-funding");
+  } else {
+    // In development, auto-fund the deployer wallet and warn if the contract
+    // address is still the zero address.
+    fundDeployerIfNeeded().catch((err) =>
+      logger.error("fundDeployerIfNeeded failed unexpectedly", { error: String(err) })
+    );
 
-  scheduleBlockchainSync();
+    scheduleBlockchainSync();
 
-  // Fix up the contract's global electionOpen switch to match whatever the
-  // DB currently says — self-heals any election left active on-chain (or
-  // stuck closed) from before this reconciliation existed.
-  reconcileOnChainElectionState().catch((err) =>
-    logger.error("reconcileOnChainElectionState failed unexpectedly", { error: String(err) })
-  );
+    // Fix up the contract's global electionOpen switch to match whatever the
+    // DB currently says — self-heals any election left active on-chain (or
+    // stuck closed) from before this reconciliation existed.
+    reconcileOnChainElectionState().catch((err) =>
+      logger.error("reconcileOnChainElectionState failed unexpectedly", { error: String(err) })
+    );
+  }
 
   startElectionScheduler();
 

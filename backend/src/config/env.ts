@@ -54,6 +54,9 @@ const envSchema = z
     WEBAUTHN_RP_NAME: z.string().default("Civic Ledger"),
     WEBAUTHN_RP_ID: z.string().default("localhost"),
     WEBAUTHN_ORIGIN: z.string().default("http://localhost:5173"),
+    // Whether to skip starting the blockchain indexer and on-chain reconciliation
+    // Useful for deployments where no RPC node is available (e.g. Render without a node).
+    SKIP_INDEXER: z.coerce.boolean().default(false),
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === "production") {

@@ -2,22 +2,34 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "CommonJS",
-    "moduleResolution": "node",
     "outDir": "dist",
+    "rootDir": "..",
     "strict": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "lib": ["ES2022"],
     "noImplicitAny": false,
-    "maxNodeModuleJsDepth": 0,
-    "types": []
+    "types": [],
+    "noEmitOnError": false,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "paths": {
+      "@voting/database": ["../database/index.ts"],
+      "@voting/database/*": ["../database/*"]
+    }
   },
   "include": [
-    "src"
+    "src",
+    "../database"
   ],
   "exclude": [
     "node_modules",
-    "../database"
-  ]
+    "dist"
+  ],
+  "ts-node": {
+    "esm": false,
+    "transpileOnly": true
+  }
 }
