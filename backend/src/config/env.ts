@@ -26,13 +26,18 @@ const envSchema = z
       .string()
       .min(32, "TOTP_ENCRYPTION_KEY must be at least 32 characters - generate one with `openssl rand -hex 32`"),
 
-    // Email — sent via SendGrid's HTTP API instead of raw SMTP so it isn't
+    // Email — sent via Resend's HTTP API instead of raw SMTP so it isn't
     // affected by hosts (Render/Vercel free tiers, etc.) that block outbound
-    // SMTP ports 25/465/587. EMAIL_FROM must be a Single Sender you've
-    // verified in SendGrid (Settings -> Sender Authentication), or an
-    // address on a domain you've verified there.
-    SENDGRID_API_KEY: z.string().optional(),
-    EMAIL_FROM: z.string().optional(), // e.g. "Civic Ledger <you@gmail.com>"
+    // SMTP ports 25/465/587.
+    //
+    // Until a domain is verified in Resend, EMAIL_FROM must stay
+    // "onboarding@resend.dev" — Resend will only actually deliver to the
+    // address used to sign up for the Resend account in that case. Once a
+    // domain (even a free one, e.g. from eu.org) is verified in Resend's
+    // dashboard, switch EMAIL_FROM to an address on that domain and it will
+    // deliver to any real user.
+    RESEND_API_KEY: z.string().optional(),
+    EMAIL_FROM: z.string().optional(), // e.g. "Civic Ledger <onboarding@resend.dev>"
     APP_BASE_URL: z.string().url().optional(),
 
     // SMS config used for the post-login phone verification OTP.
@@ -47,8 +52,8 @@ const envSchema = z
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === "production") {
-      if (!data.SENDGRID_API_KEY) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["SENDGRID_API_KEY"], message: "SENDGRID_API_KEY is required in production" });
+      if (!data.RESEND_API_KEY) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["RESEND_API_KEY"], message: "RESEND_API_KEY is required in production" });
       }
       if (!data.EMAIL_FROM) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["EMAIL_FROM"], message: "EMAIL_FROM is required in production" });
