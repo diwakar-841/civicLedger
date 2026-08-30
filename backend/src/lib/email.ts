@@ -1,60 +1,48 @@
 import { logger } from "./logger";
 import { env } from "../config/env";
 
-export interface EmailOptions {
+// Sent via Resend's HTTP API (https://resend.com) instead of raw SMTP.
+// Hosts like Render and Vercel block outbound SMTP ports (25/465/587) on
+// their free tiers, which caused OTP/verification emails to silently fail
+// or time out after deployment even though everything worked locally.
+// An HTTP API call goes out over normal port 443, so it isn't affected.
+const hasResend = !!(env.RESEND_API_KEY && env.EMAIL_FROM);
+
+interface SendEmailOpts {
   to: string;
   subject: string;
   text: string;
-  html?: string;
+  html: string;
 }
 
-// Warn at startup if production without SMTP
-if (env.NODE_ENV === "production" && !env.SMTP_HOST) {
-  logger.warn(
-    "WARNING: NODE_ENV=production but SMTP_HOST is not set. Email sending will fall back to logger.info (no emails sent). Set SMTP_HOST/SMTP_USER/SMTP_PASSWORD/APP_BASE_URL to enable real email delivery."
-  );
-}
-
-// FIX: Create a single shared transporter instead of a new one per email.
-// Creating a fresh transporter (and TCP connection) for every email was slow
-// and caused requests to hang while waiting for the SMTP handshake.
-import nodemailer from "nodemailer";
-
-const hasSmtp = !!(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASSWORD);
-
-// Singleton transporter — reuses the TCP connection across emails.
-// Connection timeouts prevent a slow/unreachable SMTP server from hanging
-// the Node process indefinitely.
-const transporter = hasSmtp
-  ? nodemailer.createTransport({
-      host: env.SMTP_HOST,
-      port: env.SMTP_PORT,
-      secure: env.SMTP_PORT === 465,
-      auth: {
-        user: env.SMTP_USER,
-        pass: env.SMTP_PASSWORD,
+async function sendEmail(opts: SendEmailOpts): Promise<void> {
+  if (hasResend) {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.RESEND_API_KEY}`,
+        "Content-Type": "application/json",
       },
-      // FIX: Hard limits so a slow Gmail connection fails fast instead of
-      // blocking the event loop for 30+ seconds.
-      connectionTimeout: 5_000,  // 5 s to establish TCP connection
-      greetingTimeout: 5_000,    // 5 s for SMTP greeting
-      socketTimeout: 10_000,     // 10 s per socket operation
-    })
-  : null;
-
-async function sendEmail(opts: EmailOptions): Promise<void> {
-  if (transporter) {
-    await transporter.sendMail({
-      from: env.SMTP_FROM ?? env.SMTP_USER,
-      to: opts.to,
-      subject: opts.subject,
-      text: opts.text,
-      html: opts.html,
+      body: JSON.stringify({
+        from: env.EMAIL_FROM,
+        to: opts.to,
+        subject: opts.subject,
+        text: opts.text,
+        html: opts.html,
+      }),
+      // Fail fast rather than hanging the request if Resend is unreachable.
+      signal: AbortSignal.timeout(10_000),
     });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`Resend API error ${res.status}: ${body}`);
+    }
+
     logger.info("Email sent", { to: opts.to, subject: opts.subject });
   } else {
     if (env.NODE_ENV === "production") {
-      logger.warn("SMTP not configured in production - email not sent (logging instead)", {
+      logger.warn("Resend not configured in production - email not sent (logging instead)", {
         to: opts.to,
         subject: opts.subject,
       });
@@ -65,6 +53,13 @@ async function sendEmail(opts: EmailOptions): Promise<void> {
       text: opts.text,
     });
   }
+}
+
+// Warn at startup if production without Resend configured
+if (env.NODE_ENV === "production" && !env.RESEND_API_KEY) {
+  logger.warn(
+    "WARNING: NODE_ENV=production but RESEND_API_KEY is not set. Email sending will fall back to logger.info (no emails sent). Set RESEND_API_KEY/EMAIL_FROM/APP_BASE_URL to enable real email delivery."
+  );
 }
 
 export async function sendVerificationEmail(to: string, token: string): Promise<void> {

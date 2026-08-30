@@ -18,56 +18,38 @@ const envSchema = z
     DEPLOYER_PRIVATE_KEY: z
       .string()
       .regex(/^(0x)?[a-fA-F0-9]{64}$/, "DEPLOYER_PRIVATE_KEY must be a 32-byte hex private key"),
-    /**
-     * Secret used to encrypt every user's server-managed wallet private key
-     * before storing it in the database.
-     *
-     * Generate one with:  openssl rand -hex 32
-     *
-     * CRITICAL — treat this like the JWT_SECRET:
-     *   • Never commit it to version control.
-     *   • Back it up securely. Losing it means losing access to all
-     *     server-managed user wallets (votes would be permanently blocked).
-     *   • If you rotate it you must re-encrypt all existing encrypted_private_key
-     *     values in the database before the old value is discarded.
-     */
     WALLET_ENCRYPTION_KEY: z
       .string()
       .min(32, "WALLET_ENCRYPTION_KEY must be at least 32 characters - generate one with `openssl rand -hex 32`"),
     CORS_ORIGIN: z.string().default("http://localhost:5173"),
-    // TOTP encryption key - required, at least 32 chars
     TOTP_ENCRYPTION_KEY: z
       .string()
       .min(32, "TOTP_ENCRYPTION_KEY must be at least 32 characters - generate one with `openssl rand -hex 32`"),
-    // SMTP / email config - optional in dev, required in production
-    SMTP_HOST: z.string().optional(),
-    SMTP_PORT: z.coerce.number().int().positive().default(587),
-    SMTP_USER: z.string().optional(),
-    SMTP_PASSWORD: z.string().optional(),
-    SMTP_FROM: z.string().optional(),
+
+    // Email — sent via Resend's HTTP API instead of raw SMTP so it isn't
+    // affected by hosts (Render/Vercel free tiers, etc.) that block outbound
+    // SMTP ports 25/465/587.
+    RESEND_API_KEY: z.string().optional(),
+    EMAIL_FROM: z.string().optional(), // e.g. "Civic Ledger <onboarding@yourdomain.com>"
     APP_BASE_URL: z.string().url().optional(),
+
     // SMS config used for the post-login phone verification OTP.
     TWILIO_ACCOUNT_SID: z.string().optional(),
     TWILIO_AUTH_TOKEN: z.string().optional(),
     TWILIO_FROM_NUMBER: z.string().optional(),
+
     // WebAuthn / biometric config
     WEBAUTHN_RP_NAME: z.string().default("Civic Ledger"),
     WEBAUTHN_RP_ID: z.string().default("localhost"),
     WEBAUTHN_ORIGIN: z.string().default("http://localhost:5173"),
-    // Whether to skip starting the blockchain indexer and on-chain reconciliation
-    // Useful for deployments where no RPC node is available (e.g. Render without a node).
-    SKIP_INDEXER: z.coerce.boolean().default(false),
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === "production") {
-      if (!data.SMTP_HOST) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["SMTP_HOST"], message: "SMTP_HOST is required in production" });
+      if (!data.RESEND_API_KEY) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["RESEND_API_KEY"], message: "RESEND_API_KEY is required in production" });
       }
-      if (!data.SMTP_USER) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["SMTP_USER"], message: "SMTP_USER is required in production" });
-      }
-      if (!data.SMTP_PASSWORD) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["SMTP_PASSWORD"], message: "SMTP_PASSWORD is required in production" });
+      if (!data.EMAIL_FROM) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["EMAIL_FROM"], message: "EMAIL_FROM is required in production" });
       }
       if (!data.APP_BASE_URL) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["APP_BASE_URL"], message: "APP_BASE_URL is required in production" });
@@ -96,5 +78,4 @@ function loadEnv() {
 }
 
 export const env = loadEnv();
-
 export const allowedOrigins = env.CORS_ORIGIN.split(",").map((origin) => origin.trim());
