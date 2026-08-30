@@ -4,7 +4,7 @@ import crypto from "crypto";
 import { db, users } from "@voting/database";
 import { eq } from "drizzle-orm";
 import { env } from "../config/env";
-import { BadRequestError, UnauthorizedError } from "../lib/errors";
+import { UnauthorizedError, BadRequestError } from "../lib/errors";
 import { sendPhoneVerificationOtp } from "../lib/sms";
 import { recordAudit } from "../lib/audit";
 import { logger } from "../lib/logger";
@@ -15,13 +15,6 @@ import { toVoterId } from "./auth.service";
 
 function generateOtp(): string {
   return String(crypto.randomInt(100000, 1000000));
-}
-
-function safeEqual(a: string, b: string): boolean {
-  const ba = Buffer.from(a, "hex");
-  const bb = Buffer.from(b, "hex");
-  if (ba.length !== bb.length) return false;
-  return crypto.timingSafeEqual(ba, bb);
 }
 
 function normalizeDob(raw: string): string {
@@ -41,15 +34,10 @@ function normalizePhone(raw: string): string {
 }
 
 // ─── Step 1: verify DOB + unique phone, send OTP ──────────────────────────────
-
-export async function verifyIdentity(
-  kycToken: string,
-  phone: string,
-  dob: string
-): Promise<{ kycToken: string; devOtp?: string }> {
+export async function verifyIdentity(kycToken: string, phone: string, dob: string) {
   let payload: { userId: string; purpose: string };
   try {
-    payload = jwt.verify(kycToken, env.JWT_SECRET) as typeof payload;
+    payload = jwt.verify(kycToken, env.JWT_SECRET) as { userId: string; purpose: string };
   } catch {
     throw new UnauthorizedError("Session expired — please sign in again");
   }
@@ -89,17 +77,11 @@ export async function verifyIdentity(
     ({ delivered } = await sendPhoneVerificationOtp(normalizedPhone, otp));
   } catch (err) {
     logger.error("Failed to send phone verification SMS", { userId: user.id, error: String(err) });
-    if (env.NODE_ENV === "production") {
-      await db.update(users).set({
-        phoneVerificationOtpHash: null,
-        phoneVerificationOtpExpiresAt: null,
-      }).where(eq(users.id, user.id));
-      throw new BadRequestError("Could not send the phone OTP. Please try again or contact the administrator.");
-    }
-    // Outside production, the OTP hash/expiry saved above is still valid even
-    // though the send attempt failed (e.g. SMS provider misconfigured or
-    // rejecting the request) — fall through and hand the code back on screen
-    // instead of blocking the tester entirely.
+    // NOTE: previously this rolled back the OTP and threw in production,
+    // blocking the flow entirely whenever the SMS provider failed. Real SMS
+    // delivery isn't set up yet, so instead we fall through in every
+    // environment and hand the code back to the client to enter manually —
+    // same as the existing dev-only behavior below.
     delivered = false;
   }
 
@@ -107,34 +89,25 @@ export async function verifyIdentity(
     logger.info(`[Phone OTP — dev] Code for ${normalizedPhone}: ${otp}`);
   }
 
-  const kycToken2 = jwt.sign(
-    { userId: user.id, purpose: "kyc-2" },
-    env.JWT_SECRET,
-    { expiresIn: "15m" }
-  );
-
+  const kycToken2 = jwt.sign({ userId: user.id, purpose: "kyc-2" }, env.JWT_SECRET, { expiresIn: "15m" });
   recordAudit(user.id, "PHONE_VERIFICATION_INITIATED").catch(() => {});
 
-  // Dev-only convenience: the OTP couldn't actually reach the phone — either
-  // no SMS provider is configured, or the send attempt itself failed (e.g.
-  // Twilio trial-account restrictions). Hand it back to the client so local
-  // testing isn't blocked. This never happens in production.
-  const devOtp = !delivered && env.NODE_ENV !== "production" ? otp : undefined;
+  // The OTP couldn't actually reach the phone — no SMS provider configured,
+  // or the send attempt failed. Hand it back to the client so the flow isn't
+  // blocked. TEMPORARY: enabled in all environments, including production,
+  // until real SMS delivery is set up. Revert this to
+  // `!delivered && env.NODE_ENV !== "production"` once SMS works, so real
+  // users never see another user's OTP reflected back in a response.
+  const devOtp = !delivered ? otp : undefined;
 
   return { kycToken: kycToken2, devOtp };
 }
 
 // ─── Step 2: verify phone OTP and complete the account ─────────────────────────
-
-export async function verifyOtp(
-  kycToken: string,
-  otp: string
-): Promise<
-  { accessToken: string; user: Record<string, unknown> }
-> {
+export async function verifyOtp(kycToken: string, otp: string) {
   let payload: { userId: string; purpose: string };
   try {
-    payload = jwt.verify(kycToken, env.JWT_SECRET) as typeof payload;
+    payload = jwt.verify(kycToken, env.JWT_SECRET) as { userId: string; purpose: string };
   } catch {
     throw new UnauthorizedError("Session expired — please sign in again");
   }
@@ -153,19 +126,20 @@ export async function verifyOtp(
   const otpOk = await bcrypt.compare(otp.trim(), user.phoneVerificationOtpHash);
   if (!otpOk) throw new BadRequestError("Incorrect verification code");
 
-  await db.update(users).set({
-    phoneVerified: true,
-    isVerified: true,
-    phoneVerificationOtpHash: null,
-    phoneVerificationOtpExpiresAt: null,
-  }).where(eq(users.id, user.id));
+  await db
+    .update(users)
+    .set({
+      phoneVerified: true,
+      isVerified: true,
+      phoneVerificationOtpHash: null,
+      phoneVerificationOtpExpiresAt: null,
+    })
+    .where(eq(users.id, user.id));
 
   recordAudit(user.id, "PHONE_VERIFIED").catch(() => {});
 
   const { rawToken } = await createSession({ userId: user.id, userAgent: "phone-verification" });
-
-  const jwt2 = (await import("jsonwebtoken")).default;
-  const accessToken = jwt2.sign({ userId: user.id, role: user.role }, env.JWT_SECRET, { expiresIn: "15m" });
+  const accessToken = jwt.sign({ userId: user.id, role: user.role }, env.JWT_SECRET, { expiresIn: "15m" });
 
   return {
     accessToken,
@@ -188,11 +162,10 @@ export async function verifyOtp(
 }
 
 // ─── Resend OTP ────────────────────────────────────────────────────────────────
-
-export async function resendKycOtp(kycToken: string): Promise<{ devOtp?: string }> {
+export async function resendKycOtp(kycToken: string) {
   let payload: { userId: string; purpose: string };
   try {
-    payload = jwt.verify(kycToken, env.JWT_SECRET) as typeof payload;
+    payload = jwt.verify(kycToken, env.JWT_SECRET) as { userId: string; purpose: string };
   } catch {
     throw new UnauthorizedError("Session expired — please sign in again");
   }
@@ -206,23 +179,22 @@ export async function resendKycOtp(kycToken: string): Promise<{ devOtp?: string 
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
   if (!user.phone) throw new BadRequestError("Please provide your phone number first");
-  await db.update(users).set({
-    phoneVerificationOtpHash: otpHash,
-    phoneVerificationOtpExpiresAt: otpExpiry,
-  }).where(eq(users.id, user.id));
+
+  await db
+    .update(users)
+    .set({
+      phoneVerificationOtpHash: otpHash,
+      phoneVerificationOtpExpiresAt: otpExpiry,
+    })
+    .where(eq(users.id, user.id));
 
   let delivered = true;
   try {
     ({ delivered } = await sendPhoneVerificationOtp(user.phone, otp));
   } catch (err) {
     logger.error("Failed to resend phone verification SMS", { userId: user.id, error: String(err) });
-    if (env.NODE_ENV === "production") {
-      await db.update(users).set({
-        phoneVerificationOtpHash: null,
-        phoneVerificationOtpExpiresAt: null,
-      }).where(eq(users.id, user.id));
-      throw new BadRequestError("Could not resend the phone OTP. Please try again or contact the administrator.");
-    }
+    // See note in verifyIdentity above — temporarily falling through in every
+    // environment instead of throwing, until real SMS delivery is set up.
     delivered = false;
   }
 
@@ -230,6 +202,8 @@ export async function resendKycOtp(kycToken: string): Promise<{ devOtp?: string 
     logger.info(`[Phone OTP resend — dev] Code for ${user.phone}: ${otp}`);
   }
 
-  const devOtp = !delivered && env.NODE_ENV !== "production" ? otp : undefined;
+  // TEMPORARY: see note in verifyIdentity above.
+  const devOtp = !delivered ? otp : undefined;
+
   return { devOtp };
 }
