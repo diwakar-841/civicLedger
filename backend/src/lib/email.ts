@@ -1,81 +1,109 @@
+import emailjs, { EmailJSResponseStatus } from "@emailjs/nodejs";
 import { logger } from "./logger";
 import { env } from "../config/env";
 
-// Sent via Resend's HTTP API (https://resend.com) instead of raw SMTP.
-// Hosts like Render and Vercel block outbound SMTP ports (25/465/587) on
-// their free tiers, which caused OTP/verification emails to silently fail
-// or time out after deployment even though everything worked locally.
-// An HTTP API call goes out over normal port 443, so it isn't affected.
+// ─────────────────────────────────────────────────────────────────────────
+// Sends via EmailJS's HTTPS API (never SMTP), so outbound-SMTP-blocking
+// hosts like Render aren't a problem.
 //
-// NOTE: until a domain is verified in Resend's dashboard, EMAIL_FROM must
-// stay "onboarding@resend.dev" and emails will only actually be delivered
-// to the address used to sign up for the Resend account — not to real
-// users. Verify a domain (even a free one) in Resend, then switch
-// EMAIL_FROM to an address on that domain to send to anyone.
-const hasResend = !!(env.RESEND_API_KEY && env.EMAIL_FROM);
+// IMPORTANT — different model from Resend/SendGrid: EmailJS does NOT take
+// raw HTML strings from your code. You design ONE template in the EmailJS
+// dashboard (Email Templates → Create New Template) with placeholder
+// variables, and this file just fills those variables in and fires the
+// send. The variables used below are: to_email, subject, message, otp_code,
+// action_url, user_name — add matching {{tags}} in your template.
+//
+// One-time EmailJS dashboard setup:
+//   1. Email Services → Add New Service (Gmail/Outlook/custom SMTP) → copy
+//      the Service ID.
+//   2. Email Templates → Create New Template → use {{to_email}}, {{subject}},
+//      {{message}}, {{otp_code}}, {{action_url}}, {{user_name}} as needed →
+//      copy the Template ID. Set the "To email" field on the template to
+//      {{to_email}}, or sends will only go to your own test address.
+//   3. Account → General → copy your Public Key.
+//   4. Account → Security → API Keys → turn ON "Allow non-browser requests".
+//      This is OFF by default and is the #1 reason server-side sends fail
+//      with a 403 ("API calls in the non-browser applications are
+//      disabled") even with correct keys.
+//   5. Account → Security → copy/create your Private Key. Always pass it
+//      from the server — it authenticates the request instead of relying
+//      on the public key + an allowlisted domain (which a backend has
+//      none of).
+//
+// Free tier: 200 emails/month, ~1 request/second. If you expect more OTP
+// volume than that, EmailJS may not be the right long-term fit.
+// ─────────────────────────────────────────────────────────────────────────
 
-interface SendEmailOpts {
-  to: string;
-  subject: string;
-  text: string;
-  html: string;
+let initialized = false;
+function ensureInit() {
+  if (initialized) return;
+  emailjs.init({
+    publicKey: env.EMAILJS_PUBLIC_KEY!,
+    privateKey: env.EMAILJS_PRIVATE_KEY!,
+  });
+  initialized = true;
 }
 
-async function sendEmail(opts: SendEmailOpts): Promise<void> {
-  if (hasResend) {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: env.EMAIL_FROM,
-        to: opts.to,
-        subject: opts.subject,
-        text: opts.text,
-        html: opts.html,
-      }),
-      // Fail fast rather than hanging the request if Resend is unreachable.
-      signal: AbortSignal.timeout(10_000),
-    });
+function isConfigured(): boolean {
+  return !!(
+    env.EMAILJS_SERVICE_ID &&
+    env.EMAILJS_TEMPLATE_ID &&
+    env.EMAILJS_PUBLIC_KEY &&
+    env.EMAILJS_PRIVATE_KEY
+  );
+}
 
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error(`Resend API error ${res.status}: ${body}`);
-    }
+interface TemplateParams {
+  to_email: string;
+  subject: string;
+  message: string;
+  otp_code?: string;
+  action_url?: string;
+  user_name?: string;
+}
 
-    logger.info("Email sent", { to: opts.to, subject: opts.subject });
-  } else {
+async function sendEmail(params: TemplateParams): Promise<void> {
+  if (!isConfigured()) {
     if (env.NODE_ENV === "production") {
-      logger.warn("Resend not configured in production - email not sent (logging instead)", {
-        to: opts.to,
-        subject: opts.subject,
+      logger.warn("EmailJS not fully configured in production - email not sent (logging instead)", {
+        to: params.to_email,
+        subject: params.subject,
       });
     }
-    logger.info("Dev email (would be sent in production)", {
-      to: opts.to,
-      subject: opts.subject,
-      text: opts.text,
-    });
+    logger.info("Dev email (would be sent in production)", params as unknown as Record<string, unknown>);
+    return;
+  }
+
+  ensureInit();
+
+  try {
+    const res = await emailjs.send(env.EMAILJS_SERVICE_ID!, env.EMAILJS_TEMPLATE_ID!, { ...params });
+    logger.info("Email sent via EmailJS", { to: params.to_email, subject: params.subject, status: res.status });
+  } catch (err) {
+    // EmailJS throws EmailJSResponseStatus with .status / .text on API errors
+    // (e.g. 403 = non-browser requests not enabled, 400 = bad service/template id)
+    if (err instanceof EmailJSResponseStatus) {
+      logger.error("EmailJS send failed", { to: params.to_email, subject: params.subject, status: err.status, text: err.text });
+    } else {
+      logger.error("EmailJS send failed", { to: params.to_email, subject: params.subject, err });
+    }
+    throw err;
   }
 }
 
-// Warn at startup if production without Resend configured
-if (env.NODE_ENV === "production" && !env.RESEND_API_KEY) {
-  logger.warn(
-    "WARNING: NODE_ENV=production but RESEND_API_KEY is not set. Email sending will fall back to logger.info (no emails sent). Set RESEND_API_KEY/EMAIL_FROM/APP_BASE_URL to enable real email delivery."
-  );
-}
+// ─────────────────────────────────────────────────────────────────────────
+// Public API — same signatures as before, nothing else needs to change.
+// ─────────────────────────────────────────────────────────────────────────
 
 export async function sendVerificationEmail(to: string, token: string): Promise<void> {
   const baseUrl = env.APP_BASE_URL ?? "http://localhost:5173";
   const link = `${baseUrl}/verify-email/${token}`;
   await sendEmail({
-    to,
+    to_email: to,
     subject: "Verify your email address – Civic Ledger",
-    text: `Please verify your Gmail address by clicking the following link:\n\n${link}\n\nThis link expires in 24 hours. If you do not complete phone verification within 24 hours of registration, your pending registration will be deleted and you can register again.`,
-    html: `<p>Please verify your Gmail address by clicking the link below:</p><p><a href="${link}">${link}</a></p><p>This link expires in 24 hours. If you do not complete phone verification within 24 hours of registration, your pending registration will be deleted and you can register again.</p>`,
+    message:
+      "Please verify your email address using the link below. This link expires in 24 hours. If you do not complete phone verification within 24 hours of registration, your pending registration will be deleted and you can register again.",
+    action_url: link,
   });
 }
 
@@ -83,40 +111,33 @@ export async function sendPasswordResetEmail(to: string, token: string): Promise
   const baseUrl = env.APP_BASE_URL ?? "http://localhost:5173";
   const link = `${baseUrl}/reset-password/${token}`;
   await sendEmail({
-    to,
+    to_email: to,
     subject: "Reset your password – Civic Ledger",
-    text: `You requested a password reset. Click the following link to reset your password:\n\n${link}\n\nThis link expires in 1 hour. If you did not request this, ignore this email.`,
-    html: `<p>You requested a password reset. Click the link below to reset your password:</p><p><a href="${link}">${link}</a></p><p>This link expires in 1 hour. If you did not request this, ignore this email.</p>`,
+    message:
+      "You requested a password reset. Use the link below to reset your password. This link expires in 1 hour. If you did not request this, ignore this email.",
+    action_url: link,
   });
 }
 
 export async function sendKycOtpEmail(to: string, otp: string): Promise<void> {
   await sendEmail({
-    to,
+    to_email: to,
     subject: "Your Civic Ledger login verification code",
-    text: `Your one-time verification code is: ${otp}\n\nThis code expires in 10 minutes. Do not share it with anyone.\n\nIf you did not attempt to log in, please change your password immediately.`,
-    html: `
-      <p>Your one-time login verification code is:</p>
-      <p style="font-size:32px;font-weight:bold;letter-spacing:8px;text-align:center;padding:16px 0;">${otp}</p>
-      <p>This code expires in <strong>10 minutes</strong>. Do not share it with anyone.</p>
-      <p style="color:#666;">If you did not attempt to log in, please change your password immediately.</p>
-    `,
+    message:
+      "Your one-time verification code is below. It expires in 10 minutes. Do not share it with anyone. If you did not attempt to log in, please change your password immediately.",
+    otp_code: otp,
   });
 }
 
 /** Sent during registration — OTP to verify email ownership before setting password */
 export async function sendRegistrationOtpEmail(to: string, name: string, otp: string): Promise<void> {
   await sendEmail({
-    to,
+    to_email: to,
     subject: "Your Civic Ledger registration code",
-    text: `Hi ${name},\n\nYour registration verification code is: ${otp}\n\nThis code expires in 10 minutes. Enter it on the registration page to set your password.\n\nIf you did not register for Civic Ledger, please ignore this email.`,
-    html: `
-      <p>Hi <strong>${name}</strong>,</p>
-      <p>Your registration verification code is:</p>
-      <p style="font-size:32px;font-weight:bold;letter-spacing:8px;text-align:center;padding:16px 0;">${otp}</p>
-      <p>This code expires in <strong>10 minutes</strong>. Enter it on the registration page to set your password.</p>
-      <p style="color:#666;">If you did not register for Civic Ledger, please ignore this email.</p>
-    `,
+    message:
+      "Your registration verification code is below. It expires in 10 minutes. Enter it on the registration page to set your password. If you did not register for Civic Ledger, please ignore this email.",
+    otp_code: otp,
+    user_name: name,
   });
 }
 
@@ -126,21 +147,11 @@ export async function sendRegistrationOtpEmail(to: string, name: string, otp: st
  */
 export async function sendRegistrationLinkEmail(to: string, name: string, link: string): Promise<void> {
   await sendEmail({
-    to,
+    to_email: to,
     subject: "Complete your Civic Ledger registration",
-    text: `Hi ${name},\n\nClick the link below to set your password and complete registration:\n\n${link}\n\nThis link expires in 24 hours. Pending registrations are deleted after 24 hours.\n\nIf you did not request this, please ignore this email.`,
-    html: `
-      <p>Hi <strong>${name}</strong>,</p>
-      <p>Click the button below to set your password and complete your registration:</p>
-      <p style="text-align:center;padding:16px 0;">
-        <a href="${link}" style="background:#d4a600;color:#0a1628;padding:12px 28px;border-radius:8px;font-weight:700;text-decoration:none;display:inline-block;">
-          Set my password
-        </a>
-      </p>
-      <p>Or copy this link into your browser:</p>
-      <p><a href="${link}">${link}</a></p>
-      <p>This link expires in <strong>24 hours</strong>. Pending registrations are deleted after 24 hours.</p>
-      <p style="color:#666;">If you did not register for Civic Ledger, please ignore this email.</p>
-    `,
+    message:
+      "Use the link below to set your password and complete your registration. This link expires in 24 hours. Pending registrations are deleted after 24 hours. If you did not request this, please ignore this email.",
+    action_url: link,
+    user_name: name,
   });
 }

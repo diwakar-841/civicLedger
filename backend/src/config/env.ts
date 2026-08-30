@@ -26,18 +26,15 @@ const envSchema = z
       .string()
       .min(32, "TOTP_ENCRYPTION_KEY must be at least 32 characters - generate one with `openssl rand -hex 32`"),
 
-    // Email — sent via Resend's HTTP API instead of raw SMTP so it isn't
+    // Email — sent via EmailJS's HTTPS API (never raw SMTP), so it isn't
     // affected by hosts (Render/Vercel free tiers, etc.) that block outbound
-    // SMTP ports 25/465/587.
-    //
-    // Until a domain is verified in Resend, EMAIL_FROM must stay
-    // "onboarding@resend.dev" — Resend will only actually deliver to the
-    // address used to sign up for the Resend account in that case. Once a
-    // domain (even a free one, e.g. from eu.org) is verified in Resend's
-    // dashboard, switch EMAIL_FROM to an address on that domain and it will
-    // deliver to any real user.
-    RESEND_API_KEY: z.string().optional(),
-    EMAIL_FROM: z.string().optional(), // e.g. "Civic Ledger <onboarding@resend.dev>"
+    // SMTP ports 25/465/587. See backend/src/lib/email.ts for the required
+    // one-time EmailJS dashboard setup (service, template, and — critically —
+    // enabling "Allow non-browser requests" under Account > Security).
+    EMAILJS_SERVICE_ID: z.string().optional(),
+    EMAILJS_TEMPLATE_ID: z.string().optional(),
+    EMAILJS_PUBLIC_KEY: z.string().optional(),
+    EMAILJS_PRIVATE_KEY: z.string().optional(),
     APP_BASE_URL: z.string().url().optional(),
 
     // SMS config used for the post-login phone verification OTP.
@@ -55,11 +52,12 @@ const envSchema = z
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === "production") {
-      if (!data.RESEND_API_KEY) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["RESEND_API_KEY"], message: "RESEND_API_KEY is required in production" });
-      }
-      if (!data.EMAIL_FROM) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["EMAIL_FROM"], message: "EMAIL_FROM is required in production" });
+      if (!data.EMAILJS_SERVICE_ID || !data.EMAILJS_TEMPLATE_ID || !data.EMAILJS_PUBLIC_KEY || !data.EMAILJS_PRIVATE_KEY) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["EMAILJS_SERVICE_ID"],
+          message: "EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, EMAILJS_PUBLIC_KEY, and EMAILJS_PRIVATE_KEY are required in production",
+        });
       }
       if (!data.APP_BASE_URL) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["APP_BASE_URL"], message: "APP_BASE_URL is required in production" });
