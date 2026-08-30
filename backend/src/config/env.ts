@@ -26,11 +26,13 @@ const envSchema = z
       .string()
       .min(32, "TOTP_ENCRYPTION_KEY must be at least 32 characters - generate one with `openssl rand -hex 32`"),
 
-    // Email — sent via Resend's HTTP API instead of raw SMTP so it isn't
+    // Email — sent via SendGrid's HTTP API instead of raw SMTP so it isn't
     // affected by hosts (Render/Vercel free tiers, etc.) that block outbound
-    // SMTP ports 25/465/587.
-    RESEND_API_KEY: z.string().optional(),
-    EMAIL_FROM: z.string().optional(), // e.g. "Civic Ledger <onboarding@yourdomain.com>"
+    // SMTP ports 25/465/587. EMAIL_FROM must be a Single Sender you've
+    // verified in SendGrid (Settings -> Sender Authentication), or an
+    // address on a domain you've verified there.
+    SENDGRID_API_KEY: z.string().optional(),
+    EMAIL_FROM: z.string().optional(), // e.g. "Civic Ledger <you@gmail.com>"
     APP_BASE_URL: z.string().url().optional(),
 
     // SMS config used for the post-login phone verification OTP.
@@ -45,8 +47,8 @@ const envSchema = z
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === "production") {
-      if (!data.RESEND_API_KEY) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["RESEND_API_KEY"], message: "RESEND_API_KEY is required in production" });
+      if (!data.SENDGRID_API_KEY) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["SENDGRID_API_KEY"], message: "SENDGRID_API_KEY is required in production" });
       }
       if (!data.EMAIL_FROM) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["EMAIL_FROM"], message: "EMAIL_FROM is required in production" });

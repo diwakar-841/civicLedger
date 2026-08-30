@@ -1,12 +1,28 @@
 import { logger } from "./logger";
 import { env } from "../config/env";
 
-// Sent via Resend's HTTP API (https://resend.com) instead of raw SMTP.
+// Sent via SendGrid's HTTP API (https://sendgrid.com) instead of raw SMTP.
 // Hosts like Render and Vercel block outbound SMTP ports (25/465/587) on
 // their free tiers, which caused OTP/verification emails to silently fail
 // or time out after deployment even though everything worked locally.
 // An HTTP API call goes out over normal port 443, so it isn't affected.
-const hasResend = !!(env.RESEND_API_KEY && env.EMAIL_FROM);
+//
+// EMAIL_FROM must be an address verified in SendGrid under
+// Settings -> Sender Authentication -> Single Sender Verification (or an
+// address on a domain you've verified there). Unverified senders are
+// rejected by SendGrid's API.
+const hasSendgrid = !!(env.SENDGRID_API_KEY && env.EMAIL_FROM);
+
+// Parses "Name <email@example.com>" or a bare "email@example.com" into the
+// {name, email} shape SendGrid's API expects.
+function parseFrom(from: string): { name?: string; email: string } {
+  const match = from.match(/^(.*)<(.+)>$/);
+  if (match) {
+    const name = match[1].trim().replace(/^"|"$/g, "");
+    return { name: name || undefined, email: match[2].trim() };
+  }
+  return { email: from.trim() };
+}
 
 interface SendEmailOpts {
   to: string;
@@ -16,33 +32,35 @@ interface SendEmailOpts {
 }
 
 async function sendEmail(opts: SendEmailOpts): Promise<void> {
-  if (hasResend) {
-    const res = await fetch("https://api.resend.com/emails", {
+  if (hasSendgrid) {
+    const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${env.RESEND_API_KEY}`,
+        Authorization: `Bearer ${env.SENDGRID_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: env.EMAIL_FROM,
-        to: opts.to,
+        personalizations: [{ to: [{ email: opts.to }] }],
+        from: parseFrom(env.EMAIL_FROM as string),
         subject: opts.subject,
-        text: opts.text,
-        html: opts.html,
+        content: [
+          { type: "text/plain", value: opts.text },
+          { type: "text/html", value: opts.html },
+        ],
       }),
-      // Fail fast rather than hanging the request if Resend is unreachable.
+      // Fail fast rather than hanging the request if SendGrid is unreachable.
       signal: AbortSignal.timeout(10_000),
     });
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      throw new Error(`Resend API error ${res.status}: ${body}`);
+      throw new Error(`SendGrid API error ${res.status}: ${body}`);
     }
 
     logger.info("Email sent", { to: opts.to, subject: opts.subject });
   } else {
     if (env.NODE_ENV === "production") {
-      logger.warn("Resend not configured in production - email not sent (logging instead)", {
+      logger.warn("SendGrid not configured in production - email not sent (logging instead)", {
         to: opts.to,
         subject: opts.subject,
       });
@@ -55,10 +73,10 @@ async function sendEmail(opts: SendEmailOpts): Promise<void> {
   }
 }
 
-// Warn at startup if production without Resend configured
-if (env.NODE_ENV === "production" && !env.RESEND_API_KEY) {
+// Warn at startup if production without SendGrid configured
+if (env.NODE_ENV === "production" && !env.SENDGRID_API_KEY) {
   logger.warn(
-    "WARNING: NODE_ENV=production but RESEND_API_KEY is not set. Email sending will fall back to logger.info (no emails sent). Set RESEND_API_KEY/EMAIL_FROM/APP_BASE_URL to enable real email delivery."
+    "WARNING: NODE_ENV=production but SENDGRID_API_KEY is not set. Email sending will fall back to logger.info (no emails sent). Set SENDGRID_API_KEY/EMAIL_FROM/APP_BASE_URL to enable real email delivery."
   );
 }
 
