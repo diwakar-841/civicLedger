@@ -32,7 +32,8 @@ const envSchema = z
     // one-time EmailJS dashboard setup (service, template, and — critically —
     // enabling "Allow non-browser requests" under Account > Security).
     EMAILJS_SERVICE_ID: z.string().optional(),
-    EMAILJS_TEMPLATE_ID: z.string().optional(),
+    EMAILJS_OTP_TEMPLATE_ID: z.string().optional(), // EmailJS "One-Time Password" pre-built template
+    EMAILJS_LINK_TEMPLATE_ID: z.string().optional(), // EmailJS link-style template (e.g. "Password Reset")
     EMAILJS_PUBLIC_KEY: z.string().optional(),
     EMAILJS_PRIVATE_KEY: z.string().optional(),
     APP_BASE_URL: z.string().url().optional(),
@@ -52,11 +53,11 @@ const envSchema = z
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === "production") {
-      if (!data.EMAILJS_SERVICE_ID || !data.EMAILJS_TEMPLATE_ID || !data.EMAILJS_PUBLIC_KEY || !data.EMAILJS_PRIVATE_KEY) {
+      if (!data.EMAILJS_SERVICE_ID || !data.EMAILJS_OTP_TEMPLATE_ID || !data.EMAILJS_PUBLIC_KEY || !data.EMAILJS_PRIVATE_KEY) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["EMAILJS_SERVICE_ID"],
-          message: "EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, EMAILJS_PUBLIC_KEY, and EMAILJS_PRIVATE_KEY are required in production",
+          message: "EMAILJS_SERVICE_ID, EMAILJS_OTP_TEMPLATE_ID, EMAILJS_PUBLIC_KEY, and EMAILJS_PRIVATE_KEY are required in production",
         });
       }
       if (!data.APP_BASE_URL) {
