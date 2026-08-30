@@ -7,8 +7,9 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@voting/database": "file:../database",
+    "@emailjs/nodejs": "^5.0.2",
     "@simplewebauthn/server": "^13.3.2",
+    "@voting/database": "file:../database",
     "bcrypt": "npm:bcryptjs@2.4.3",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
