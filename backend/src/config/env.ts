@@ -45,6 +45,9 @@ const envSchema = z
     TWILIO_AUTH_TOKEN: z.string().optional(),
     TWILIO_FROM_NUMBER: z.string().optional(),
 
+    // Set to "true" to skip starting the blockchain event indexer job on boot.
+    SKIP_INDEXER: z.string().optional(),
+
     // WebAuthn / biometric config
     WEBAUTHN_RP_NAME: z.string().default("Civic Ledger"),
     WEBAUTHN_RP_ID: z.string().default("localhost"),
