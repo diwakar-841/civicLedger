@@ -14,7 +14,14 @@ const SIZES = {
   lg: "px-6 py-3 text-base"
 };
 
-export const Button = forwardRef(function Button(
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: keyof typeof VARIANTS;
+  size?: keyof typeof SIZES;
+  loading?: boolean;
+  fullWidth?: boolean;
+}
+
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
 { variant = "primary", size = "md", loading, fullWidth, className = "", disabled, children, ...rest },
 ref)
 {

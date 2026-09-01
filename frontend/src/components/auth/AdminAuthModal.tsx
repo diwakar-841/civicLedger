@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ShieldCheck, Fingerprint, KeyRound, X, AlertCircle } from "lucide-react";
 import { runAdminBiometricAuth } from "../../lib/webauthn";
 import { apiClient } from "../../lib/apiClient";
+import { formatError } from "../../lib/formatError";
 import { Button } from "../shared/Button";import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
 
 export function AdminAuthModal({
@@ -38,7 +39,7 @@ export function AdminAuthModal({
       await onConfirm();
       handleClose();
     } catch (err) {
-      const msg = err?.response?.data?.message ?? err?.message ?? "Biometric authentication failed";
+      const msg = formatError(err, "Biometric authentication failed");
 
       if (
       msg.includes("NotAllowedError") ||
@@ -67,7 +68,7 @@ export function AdminAuthModal({
       await onConfirm();
       handleClose();
     } catch (err) {
-      setError(err?.response?.data?.message ?? err?.message ?? "PIN verification failed");
+      setError(formatError(err, "PIN verification failed"));
     } finally {
       setLoading(false);
     }

@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { X, Clock, CheckCircle2, XCircle, Fingerprint, KeyRound, ShieldCheck } from "lucide-react";
 import { Button } from "../shared/Button";
-import { Card } from "../shared/Card";import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
+import { Card } from "../shared/Card";
+import { formatError } from "../../lib/formatError";import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
 
 export function CandidateRequestModal({
   requests,
@@ -34,7 +35,7 @@ export function CandidateRequestModal({
       onClose?.();
       navigate(`/candidate-profile/${request.id}`);
     } catch (err) {
-      setError(err?.response?.data?.error || err?.response?.data?.message || err?.message || "Verification failed");
+      setError(formatError(err, "Verification failed"));
     } finally {
       setAction(null);
     }
@@ -48,7 +49,7 @@ export function CandidateRequestModal({
       setSelectedRequest(null);
       setRejectionReason("");
     } catch (err) {
-      setError(err?.response?.data?.error || err?.message || "Could not decline this request");
+      setError(formatError(err, "Could not decline this request"));
     } finally {
       setAction(null);
     }

@@ -24,9 +24,9 @@ createdAt)
 export async function recordAudit(
 actor,
 action,
-metadata,
-txHash,
-ipAddress)
+  metadata?,
+  txHash?,
+  ipAddress?)
 {
   try {
 

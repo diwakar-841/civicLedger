@@ -7,7 +7,8 @@ import { Button } from "../components/shared/Button";
 import { EmptyState } from "../components/shared/EmptyState";
 import { Spinner } from "../components/shared/Spinner";
 import { useNotifications } from "../hooks/useNotifications";
-import { apiClient } from "../lib/apiClient";import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
+import { apiClient } from "../lib/apiClient";
+import { formatError } from "../lib/formatError";import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
 
 function InsufficientCandidatesActions({
   electionId,
@@ -29,7 +30,7 @@ function InsufficientCandidatesActions({
       setShowExtendForm(false);
       onActionDone?.();
     } catch (err) {
-      setLocalError(err?.response?.data?.error || "Failed to extend deadline");
+      setLocalError(formatError(err, "Failed to extend deadline"));
     } finally {
       setExtending(false);
     }
@@ -42,7 +43,7 @@ function InsufficientCandidatesActions({
       await apiClient.post(`/admin/elections/${electionId}/cancel`);
       onActionDone?.();
     } catch (err) {
-      setLocalError(err?.response?.data?.error || "Failed to close election");
+      setLocalError(formatError(err, "Failed to close election"));
     } finally {
       setClosing(false);
       setConfirmClose(false);

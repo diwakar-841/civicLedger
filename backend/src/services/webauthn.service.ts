@@ -2,7 +2,8 @@ import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
   generateAuthenticationOptions,
-  verifyAuthenticationResponse 
+  verifyAuthenticationResponse,
+  type AuthenticatorTransportFuture
 } from
 "@simplewebauthn/server";
 
@@ -16,6 +17,25 @@ import { createSession } from "./session.service";
 import { recordAudit } from "../lib/audit";
 import { and } from "drizzle-orm";
 import { candidateRequestService } from "./candidateRequest.service";
+import { verifyJwtPayload } from "../lib/jwt";
+
+const AUTHENTICATOR_TRANSPORTS = new Set<AuthenticatorTransportFuture>([
+  "ble",
+  "cable",
+  "hybrid",
+  "internal",
+  "nfc",
+  "smart-card",
+  "usb"
+]);
+
+function normalizeTransports(value: unknown): AuthenticatorTransportFuture[] {
+  if (!Array.isArray(value)) {return [];}
+  return value.filter(
+    (transport): transport is AuthenticatorTransportFuture =>
+      typeof transport === "string" && AUTHENTICATOR_TRANSPORTS.has(transport as AuthenticatorTransportFuture)
+  );
+}
 
 function mapUser(user) {
   return {
@@ -37,7 +57,7 @@ function getAllowedOrigins() {
 export async function getRegistrationOptions(setupToken) {
   let payload;
   try {
-    payload = jwt.verify(setupToken, env.JWT_SECRET);
+    payload = verifyJwtPayload(setupToken, env.JWT_SECRET);
   } catch {
     throw new UnauthorizedError("Setup session expired — please sign in again");
   }
@@ -63,7 +83,7 @@ export async function getRegistrationOptions(setupToken) {
     },
     excludeCredentials: existing.map((c) => {return {
         id: c.credentialId,
-        transports: c.transports ?? []
+        transports: normalizeTransports(c.transports)
       };})
   });
 
@@ -78,7 +98,7 @@ credential)
 {
   let payload;
   try {
-    payload = jwt.verify(setupToken, env.JWT_SECRET);
+    payload = verifyJwtPayload(setupToken, env.JWT_SECRET);
   } catch {
     throw new UnauthorizedError("Setup session expired — please sign in again");
   }
@@ -110,7 +130,7 @@ credential)
     publicKey: Buffer.from(cred.publicKey).toString("base64url"),
     counter: cred.counter,
     deviceType: credentialDeviceType,
-    transports: credential.response.transports ?? []
+    transports: normalizeTransports(credential.response.transports)
   });
 
   await db.
@@ -141,7 +161,7 @@ export async function getAuthenticationOptions(userId) {
     userVerification: "required",
     allowCredentials: userCreds.map((c) => {return {
         id: c.credentialId,
-        transports: c.transports ?? []
+        transports: normalizeTransports(c.transports)
       };})
   });
 
@@ -170,7 +190,7 @@ credential)
       id: stored.credentialId,
       publicKey: Buffer.from(stored.publicKey, "base64url"),
       counter: stored.counter,
-      transports: stored.transports ?? []
+      transports: normalizeTransports(stored.transports)
     },
     requireUserVerification: true
   });
@@ -221,7 +241,7 @@ pin)
 export async function getLoginAuthenticationOptions(loginToken) {
   let payload;
   try {
-    payload = jwt.verify(loginToken, env.JWT_SECRET);
+    payload = verifyJwtPayload(loginToken, env.JWT_SECRET);
   } catch {
     throw new UnauthorizedError("Login session expired");
   }
@@ -238,7 +258,7 @@ ipAddress)
 {
   let payload;
   try {
-    payload = jwt.verify(loginToken, env.JWT_SECRET);
+    payload = verifyJwtPayload(loginToken, env.JWT_SECRET);
   } catch {
     throw new UnauthorizedError("Login session expired — please sign in again");
   }
@@ -264,7 +284,7 @@ ipAddress)
       id: stored.credentialId,
       publicKey: Buffer.from(stored.publicKey, "base64url"),
       counter: stored.counter,
-      transports: stored.transports ?? []
+      transports: normalizeTransports(stored.transports)
     },
     requireUserVerification: true
   });
@@ -325,7 +345,7 @@ credential)
       id: stored.credentialId,
       publicKey: Buffer.from(stored.publicKey, "base64url"),
       counter: stored.counter,
-      transports: stored.transports ?? []
+      transports: normalizeTransports(stored.transports)
     },
     requireUserVerification: true
   });

@@ -10,6 +10,7 @@ import { recordAudit } from "../lib/audit";
 import { logger } from "../lib/logger";
 import { createSession } from "./session.service";
 import { toVoterId } from "./auth.service";
+import { verifyJwtPayload } from "../lib/jwt";
 
 function generateOtp() {
   return String(crypto.randomInt(100000, 1000000));
@@ -34,7 +35,7 @@ function normalizePhone(raw) {
 export async function verifyIdentity(kycToken, phone, dob) {
   let payload;
   try {
-    payload = jwt.verify(kycToken, env.JWT_SECRET);
+    payload = verifyJwtPayload(kycToken, env.JWT_SECRET);
   } catch {
     throw new UnauthorizedError("Session expired — please sign in again");
   }
@@ -93,7 +94,7 @@ export async function verifyIdentity(kycToken, phone, dob) {
 export async function verifyOtp(kycToken, otp) {
   let payload;
   try {
-    payload = jwt.verify(kycToken, env.JWT_SECRET);
+    payload = verifyJwtPayload(kycToken, env.JWT_SECRET);
   } catch {
     throw new UnauthorizedError("Session expired — please sign in again");
   }
@@ -150,7 +151,7 @@ export async function verifyOtp(kycToken, otp) {
 export async function resendKycOtp(kycToken) {
   let payload;
   try {
-    payload = jwt.verify(kycToken, env.JWT_SECRET);
+    payload = verifyJwtPayload(kycToken, env.JWT_SECRET);
   } catch {
     throw new UnauthorizedError("Session expired — please sign in again");
   }

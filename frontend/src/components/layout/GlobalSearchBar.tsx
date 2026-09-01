@@ -13,7 +13,7 @@ const TYPE_TABS = [
 { value: "admin", label: "Admins" },
 { value: "group", label: "Groups" }];
 
-export function GlobalSearchBar({ autoFocus, onClose } = {}) {
+export function GlobalSearchBar({ autoFocus, onClose }: { autoFocus?: boolean; onClose?: () => void } = {}) {
   const { isAdmin } = useAuthContext();
   const [query, setQuery] = useState("");
   const [type, setType] = useState("all");

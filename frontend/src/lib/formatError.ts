@@ -1,6 +1,6 @@
 import axios from "axios";
 
-export function formatError(err, fallback = "Something went wrong") {
+export function formatError(err: unknown, fallback = "Something went wrong"): string {
   if (axios.isAxiosError(err)) {
 
     const data = err.response?.data;

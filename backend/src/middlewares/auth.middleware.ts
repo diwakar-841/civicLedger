@@ -3,6 +3,29 @@ import jwt from "jsonwebtoken";
 import { env } from "../config/env";
 import { UnauthorizedError, ForbiddenError } from "../lib/errors";
 
+export interface AuthenticatedUser {
+  userId: string;
+  role?: string;
+}
+
+export type AuthedRequest = Request & {
+  user: AuthenticatedUser;
+};
+
+type AuthTokenPayload = jwt.JwtPayload & {
+  userId: string;
+  role?: string;
+  purpose?: string;
+};
+
+function verifyAuthToken(token: string): AuthTokenPayload {
+  const payload = jwt.verify(token, env.JWT_SECRET);
+  if (typeof payload === "string") {
+    throw new UnauthorizedError("Invalid or expired token");
+  }
+  return payload as AuthTokenPayload;
+}
+
 export function requireAuth(req, res, next) {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) {
@@ -10,7 +33,7 @@ export function requireAuth(req, res, next) {
   }
   try {
     const token = header.slice("Bearer ".length);
-    const payload = jwt.verify(token, env.JWT_SECRET);
+    const payload = verifyAuthToken(token);
 
     if (payload.purpose) {
       return next(new UnauthorizedError("Invalid or expired token"));
@@ -27,7 +50,7 @@ export function requireKycToken(purpose) {
     const token = req.body?.kycToken;
     if (!token) {return next(new UnauthorizedError("Missing KYC token"));}
     try {
-      const payload = jwt.verify(token, env.JWT_SECRET);
+      const payload = verifyAuthToken(token);
       if (payload.purpose !== purpose) {return next(new UnauthorizedError("Invalid token for this step"));}
       req.kycUserId = payload.userId;
       req.kycRole = payload.role;
@@ -42,7 +65,7 @@ export function requireSetupToken(req, res, next) {
   const token = req.body?.setupToken;
   if (!token) {return next(new UnauthorizedError("Missing setup token"));}
   try {
-    const payload = jwt.verify(token, env.JWT_SECRET);
+    const payload = verifyAuthToken(token);
     if (payload.purpose !== "biometric-setup") {return next(new UnauthorizedError("Invalid setup token"));}
     req.kycUserId = payload.userId;
     req.kycRole = payload.role;
@@ -57,7 +80,7 @@ export function optionalAuth(req, res, next) {
   if (!header?.startsWith("Bearer ")) {return next();}
   try {
     const token = header.slice("Bearer ".length);
-    const payload = jwt.verify(token, env.JWT_SECRET);
+    const payload = verifyAuthToken(token);
     if (!payload.purpose) {
       req.user = { userId: payload.userId, role: payload.role };
     }

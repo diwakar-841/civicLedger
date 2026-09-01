@@ -9,6 +9,7 @@ import { sendPasswordResetEmail, sendRegistrationOtpEmail, sendVerificationEmail
 import { createSession } from "./session.service";
 import { recordAudit } from "../lib/audit";
 import { logger } from "../lib/logger";
+import { verifyJwtPayload } from "../lib/jwt";
 
 function generateOtp() {
   return String(crypto.randomInt(100000, 1000000));
@@ -123,7 +124,7 @@ ipAddress)
 {
   let payload;
   try {
-    payload = jwt.verify(setPasswordToken, env.JWT_SECRET);
+    payload = verifyJwtPayload(setPasswordToken, env.JWT_SECRET);
   } catch {
     throw new UnauthorizedError("Link has expired — please restart registration or request a new email");
   }
@@ -206,7 +207,7 @@ userAgent)
 {
   let payload;
   try {
-    payload = jwt.verify(loginToken, env.JWT_SECRET);
+    payload = verifyJwtPayload(loginToken, env.JWT_SECRET);
   } catch {
     throw new UnauthorizedError("Login session expired — please sign in again");
   }
@@ -265,7 +266,7 @@ userAgent)
 {
   let payload;
   try {
-    payload = jwt.verify(challengeToken, env.JWT_SECRET);
+    payload = verifyJwtPayload(challengeToken, env.JWT_SECRET);
   } catch {
     throw new UnauthorizedError("Challenge token expired or invalid");
   }
@@ -280,7 +281,7 @@ userAgent)
   const isRecovery = code.includes("-");
   if (isRecovery) {
     if (!user.twoFactorRecoveryCodesHash) {throw new UnauthorizedError("No recovery codes configured");}
-    const codesHash = JSON.parse(user.twoFactorRecoveryCodesHash);
+    const codesHash = JSON.parse(user.twoFactorRecoveryCodesHash as string);
 
     const { valid, remaining } = verifyRecoveryCode(code.trim(), codesHash);
     if (!valid) {throw new UnauthorizedError("Invalid recovery code");}
@@ -423,7 +424,7 @@ export async function resendVerification(userId, ipAddress) {
 
 async function sendEmailVerificationChallenge(
 user,
-requestedMethod)
+requestedMethod?)
 {
   const method = requestedMethod ?? user.emailVerificationMethod ?? "otp";
   const registrationExpiry = user.registrationExpiresAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000);

@@ -1,7 +1,13 @@
 import { InputHTMLAttributes, TextareaHTMLAttributes, forwardRef, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
 
-export const TextField = forwardRef(
+interface TextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
+  label: string;
+  error?: string;
+  hint?: string;
+}
+
+export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
   function TextField({ label, error, hint, id, type = "text", className = "", ...rest }, ref) {
     const [visible, setVisible] = useState(false);
     const isPassword = type === "password";
@@ -49,7 +55,13 @@ export const TextField = forwardRef(
   }
 );
 
-export const TextAreaField = forwardRef(
+interface TextAreaFieldProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+  label: string;
+  error?: string;
+  hint?: string;
+}
+
+export const TextAreaField = forwardRef<HTMLTextAreaElement, TextAreaFieldProps>(
 
   function TextAreaField({ label, error, hint, id, className = "", ...rest }, ref) {
     const fieldId = id ?? label.toLowerCase().replace(/\s+/g, "-");

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../lib/apiClient";
+import { formatError } from "../lib/formatError";
 
 const EMPTY = { elections: [], users: [], admins: [] };
 
@@ -33,7 +34,7 @@ export function useAdminSearch(query, type = "all") {
         }
       } catch (err) {
         if (id === requestId.current) {
-          setError(err?.response?.data?.message || err?.message || "Search failed");
+          setError(formatError(err, "Search failed"));
           setResults(EMPTY);
         }
       } finally {

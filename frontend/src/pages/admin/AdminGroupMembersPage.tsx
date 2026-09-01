@@ -22,6 +22,7 @@ import { Layout } from "../../components/layout/Layout";
 import { Card } from "../../components/shared/Card";
 import { Spinner } from "../../components/shared/Spinner";
 import { apiClient } from "../../lib/apiClient";
+import { formatError } from "../../lib/formatError";
 import { useToast } from "../../contexts/ToastContext";
 import { AdminAuthModal } from "../../components/auth/AdminAuthModal";import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
 
@@ -47,8 +48,9 @@ const ACTIVITY_STYLES = {
   group_deleted: { label: "Group deleted", icon: Trash2, tone: "bg-red-50 text-red-700" }
 };
 
-function activityStyle(type) {
-  return ACTIVITY_STYLES[type] ?? { label: type.replace(/_/g, " "), icon: History, tone: "bg-navy-100 text-navy-600" };
+function activityStyle(type: string) {
+  const styles: Record<string, { label: string; icon: typeof History; tone: string }> = ACTIVITY_STYLES;
+  return styles[type] ?? { label: type.replace(/_/g, " "), icon: History, tone: "bg-navy-100 text-navy-600" };
 }
 
 export function AdminGroupMembersPage() {
@@ -83,7 +85,7 @@ export function AdminGroupMembersPage() {
       setMembers(Array.isArray(memberList.data) ? memberList.data : []);
       setActivity(Array.isArray(activityList.data) ? activityList.data : []);
     } catch (err) {
-      setError(err?.response?.data?.error || "Could not load group members");
+      setError(formatError(err, "Could not load group members"));
     } finally {
       setLoading(false);
     }
@@ -138,7 +140,7 @@ export function AdminGroupMembersPage() {
       setSelected(null);
       await load();
     } catch (err) {
-      throw new Error(err?.response?.data?.error || err?.response?.data?.message || "Could not remove this member.");
+      throw new Error(formatError(err, "Could not remove this member."));
     }
   }
 

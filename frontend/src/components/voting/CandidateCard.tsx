@@ -1,5 +1,5 @@
 import { CheckCircle2, BadgeCheck, Building2, Info } from "lucide-react";
-import { Candidate } from "../../hooks/useElections";import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
+import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
 
 function initials(name) {
   return name.

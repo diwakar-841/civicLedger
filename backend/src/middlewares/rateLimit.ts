@@ -10,7 +10,7 @@ export const authLimiter = rateLimit({
   message: { error: "Too many attempts. Please try again in a few minutes." }
 });
 
-export const authSlowDown = slowDown({
+export const authSlowDown: RequestHandler = slowDown({
   windowMs: 15 * 60 * 1000,
   delayAfter: 3,
   delayMs: (hits) => {return hits * 500;}

@@ -27,7 +27,7 @@ export function useScheduleElection() {
   {
     setLoading(true);
     try {
-      const body = {};
+      const body: Record<string, unknown> = {};
       if (input.startTime) {body.startTime = input.startTime;}
       if (input.endTime) {body.endTime = input.endTime;}
 

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { AuthedRequest } from "../middlewares/auth.middleware";
+import { rowsOf } from "../lib/dbRows";
 import {
   createElection,
   scheduleElection,
@@ -61,7 +62,7 @@ export async function getOne(req, res, next) {
       const membership = await (await import("@voting/database")).db.execute(
         (await import("drizzle-orm")).sql`SELECT 1 FROM group_members WHERE group_id=${election.groupId} AND user_id=${req.user?.userId} LIMIT 1`
       );
-      if (!(membership.rows ?? membership).length) {throw new NotFoundError("Election not found");}
+      if (!rowsOf(membership).length) {throw new NotFoundError("Election not found");}
     }
 
     if ((election.isHidden || election.status === "draft") && !isAdmin) {

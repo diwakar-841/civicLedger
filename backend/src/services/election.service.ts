@@ -4,6 +4,7 @@ import { NotFoundError, BadRequestError, ConflictError } from "../lib/errors";
 import { registerCandidateOnChain } from "./blockchain.service";
 import { recordAudit } from "../lib/audit";
 import { logger } from "../lib/logger";
+import { rowsOf } from "../lib/dbRows";
 import {
   MIN_VOTING_MINUTES,
   MAX_VOTING_MINUTES,
@@ -76,11 +77,11 @@ export async function searchVoters(query) {
     LIMIT 10
   `);
 
-  return (rows.rows ?? rows).map((u) => {return {
+  return rowsOf(rows).map((u) => {return {
       id: u.id,
       fullName: u.full_name,
 
-      voterId: "VTR-" + u.id.replace(/-/g, "").slice(0, 8).toUpperCase(),
+      voterId: "VTR-" + (u.id as string).replace(/-/g, "").slice(0, 8).toUpperCase(),
       walletLinked: Boolean(u.wallet_address),
       photoUrl: u.profile_photo_url ?? null
     };});
@@ -94,9 +95,11 @@ function bareIdQuery(q) {
   return q.replace(/^[a-z]{2,4}-/i, "").replace(/-/g, "");
 }
 
+export type AdminSearchType = "all" | "election" | "user" | "admin" | "group";
+
 export async function adminSearch(
 query,
-type = "all",
+type: AdminSearchType = "all",
 isAdmin = true,
 userId)
 {
@@ -165,10 +168,10 @@ userId)
   Promise.resolve({ rows: [] })]
   );
 
-  const elRows = electionRows.rows ?? electionRows;
-  const usrRows = userRows.rows ?? userRows;
-  const admRows = adminRows.rows ?? adminRows;
-  const grpRows = groupRows.rows ?? groupRows;
+  const elRows = rowsOf(electionRows);
+  const usrRows = rowsOf(userRows);
+  const admRows = rowsOf(adminRows);
+  const grpRows = rowsOf(groupRows);
 
   return {
     elections: elRows.map((e) => {return {
@@ -209,7 +212,7 @@ actorId)
   const dupResult = await db.execute(
     sql`SELECT id FROM elections WHERE LOWER(title) = LOWER(${title}) LIMIT 1`
   );
-  const dupRows = dupResult.rows ?? dupResult;
+  const dupRows = rowsOf(dupResult);
   if (dupRows.length > 0) {
     throw new ConflictError("An election with this title already exists. Please choose a different title.");
   }
@@ -300,7 +303,12 @@ actorId)
     }
   }
 
-  const updateFields = {
+  const updateFields: {
+    startTime: Date;
+    endTime: Date;
+    nominationDeadline?: Date;
+    nominationAlertSent?: boolean;
+  } = {
     startTime: data.startTime,
     endTime: data.endTime
   };
@@ -358,7 +366,14 @@ actorId)
   return updated;
 }
 
-export async function listElections(opts = { includeHidden: false }) {
+export interface ElectionListOptions {
+  includeHidden?: boolean;
+  userId?: string;
+}
+
+export async function listElections(
+  opts: ElectionListOptions = { includeHidden: false }
+) {
   if (opts.includeHidden) {return db.query.elections.findMany();}
   const result = await db.query.elections.findMany({
 
@@ -370,7 +385,7 @@ export async function listElections(opts = { includeHidden: false }) {
   });
   if (!opts.userId) {return result.filter((e) => {return e.electionType !== "group";});}
   const memberships = await db.execute(sql`SELECT group_id FROM group_members WHERE user_id=${opts.userId}`);
-  const ids = new Set((memberships.rows ?? memberships).map((r) => {return r.group_id;}));
+  const ids = new Set(rowsOf(memberships).map((r) => {return r.group_id;}));
   return result.filter((e) => {return e.electionType !== "group" || ids.has(e.groupId);});
 }
 
@@ -395,7 +410,7 @@ export async function getElectionWithCandidates(electionId) {
     ORDER BY created_at ASC
   `);
 
-  const electionCandidates = (candidateRows.rows ?? candidateRows).map(
+  const electionCandidates = rowsOf(candidateRows).map(
     (r) => {return {
         id: r.id,
         electionId: r.election_id,
@@ -404,7 +419,7 @@ export async function getElectionWithCandidates(electionId) {
         onChainCandidateId: r.on_chain_candidate_id,
         voterUserId: r.voter_user_id ?? null,
         voterId: r.voter_user_id ?
-        "VTR-" + r.voter_user_id.replace(/-/g, "").slice(0, 8).toUpperCase() :
+        "VTR-" + (r.voter_user_id as string).replace(/-/g, "").slice(0, 8).toUpperCase() :
         null,
         photoUrl: r.photo_url ?? null,
         bio: r.bio ?? null,
@@ -531,7 +546,11 @@ export async function setLiveResults(electionId, enabled, actorId) {
 
   const wasPublished = isResultsPublished(election);
   const nowPublishing = enabled && !wasPublished;
-  const patch = { liveResultsEnabled: enabled };
+  const patch: {
+    liveResultsEnabled: boolean;
+    resultsPublishedAt?: Date;
+    isHidden?: boolean;
+  } = { liveResultsEnabled: enabled };
   if (nowPublishing) {
     patch.resultsPublishedAt = new Date();
     patch.isHidden = false;

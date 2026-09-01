@@ -1,6 +1,7 @@
 import { db } from "@voting/database";
 import { notifications, notificationSettings } from "../../../database/schema/notifications";
 import { eq, and, desc, sql } from "drizzle-orm";
+import { rowsOf } from "../lib/dbRows";
 
 export const notificationService = {
   async createNotification(
@@ -9,7 +10,7 @@ export const notificationService = {
   title,
   message,
   relatedId,
-  metadata)
+  metadata?)
   {
     const result = await db.insert(notifications).values({
       userId,
@@ -70,7 +71,7 @@ export const notificationService = {
       WHERE election_id = ${electionId}
         AND voter_user_id IS NOT NULL
     `);
-    const rows = participants.rows ?? participants;
+    const rows = rowsOf(participants);
     for (const participant of rows) {
       await this.createNotification(
         participant.voter_user_id,

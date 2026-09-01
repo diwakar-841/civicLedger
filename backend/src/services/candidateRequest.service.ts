@@ -8,6 +8,7 @@ import jwt from "jsonwebtoken";
 import { env } from "../config/env";
 import { BadRequestError, UnauthorizedError } from "../lib/errors";
 import { addCandidate } from "./election.service";
+import { verifyJwtPayload } from "../lib/jwt";
 
 export const candidateRequestService = {
   async createRequest(electionId, userId, nominationDeadline) {
@@ -106,7 +107,7 @@ export const candidateRequestService = {
 
   verifyAcceptAuthToken(token, userId, requestId) {
     try {
-      const payload = jwt.verify(token, env.JWT_SECRET);
+      const payload = verifyJwtPayload(token, env.JWT_SECRET);
 
       if (
       payload.purpose !== "candidate-accept" ||

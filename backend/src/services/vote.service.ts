@@ -1,5 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { db, votesCache, candidates, users, elections } from "@voting/database";
+import { rowsOf } from "../lib/dbRows";
 import {
   castVoteAsUser,
   checkHasVoted,
@@ -51,7 +52,7 @@ export async function castVote(params)
   if (!election) {throw new NotFoundError("Election not found.");}
   if (election.electionType === "group") {
     const member = await db.execute(sql`SELECT 1 FROM group_members WHERE group_id=${election.groupId} AND user_id=${params.userId} LIMIT 1`);
-    if (!(member.rows ?? member).length) {throw new ForbiddenError("Only members of this election group may vote.");}
+    if (!rowsOf(member).length) {throw new ForbiddenError("Only members of this election group may vote.");}
   }
   const now = Date.now();
   if (

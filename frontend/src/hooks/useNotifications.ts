@@ -15,7 +15,7 @@ export function useNotifications() {
       setError(null);
     } catch (err) {
 
-      console.error("[v0] Notifications load failed (non-critical):", err?.message);
+      console.error("[v0] Notifications load failed (non-critical):", err);
       setNotifications([]);
       setError(null);
     } finally {
@@ -39,7 +39,7 @@ export function useNotifications() {
         );}
       );
     } catch (err) {
-      console.error("[v0] Error marking notification as read:", err?.message);
+      console.error("[v0] Error marking notification as read:", err);
     }
   };
 
@@ -48,7 +48,7 @@ export function useNotifications() {
       await apiClient.patch("/notifications/read-all");
       setNotifications((prev) => {return prev.map((n) => {return { ...n, isRead: true };});});
     } catch (err) {
-      console.error("[v0] Error marking all as read:", err?.message);
+      console.error("[v0] Error marking all as read:", err);
     }
   };
 
@@ -57,7 +57,7 @@ export function useNotifications() {
       await apiClient.delete(`/notifications/${notificationId}`);
       setNotifications((prev) => {return prev.filter((n) => {return n.id !== notificationId;});});
     } catch (err) {
-      console.error("[v0] Error deleting notification:", err?.message);
+      console.error("[v0] Error deleting notification:", err);
     }
   };
 

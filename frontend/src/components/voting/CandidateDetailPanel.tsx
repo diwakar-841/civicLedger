@@ -1,5 +1,4 @@
 import { BadgeCheck, Building2, Info, MousePointerClick, Award, Lightbulb } from "lucide-react";
-import { Candidate } from "../../hooks/useElections";
 import { Button } from "../shared/Button";import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
 
 function initials(name) {

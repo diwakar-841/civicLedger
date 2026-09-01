@@ -1,7 +1,6 @@
 import { AlertTriangle, BadgeCheck, Building2, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Button } from "../shared/Button";
-import { Candidate } from "../../hooks/useElections";import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
+import { Button } from "../shared/Button";import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
 
 function initials(name) {
   return name.

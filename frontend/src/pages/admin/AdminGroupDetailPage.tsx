@@ -22,20 +22,21 @@ import { Spinner } from "../../components/shared/Spinner";
 import { VoterDetailModal } from "../../components/admin/VoterDetailModal";
 import { useVoterSearch } from "../../hooks/useAdminElections";
 import { apiClient } from "../../lib/apiClient";
+import { formatError } from "../../lib/formatError";
 import { useToast } from "../../contexts/ToastContext";import { jsxDEV as _jsxDEV, Fragment as _Fragment } from "react/jsx-dev-runtime";
 
 function initials(name) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => {return part[0]?.toUpperCase();}).join("") || "G";
 }
 
-async function fileToCompressedDataUrl(file, max = 320) {
-  const dataUrl = await new Promise((resolve, reject) => {
+async function fileToCompressedDataUrl(file: File, max = 320): Promise<string> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {return resolve(String(reader.result));};
     reader.onerror = () => {return reject(new Error("Could not read the image"));};
     reader.readAsDataURL(file);
   });
-  const image = await new Promise((resolve, reject) => {
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
     img.onload = () => {return resolve(img);};
     img.onerror = () => {return reject(new Error("Unsupported image"));};
@@ -88,7 +89,7 @@ export function AdminGroupDetailPage() {
       setMembers(Array.isArray(memberList.data) ? memberList.data : []);
       setRequests(Array.isArray(requestList.data) ? requestList.data : []);
     } catch (err) {
-      setError(err?.response?.data?.error || "Could not load group");
+      setError(formatError(err, "Could not load group"));
     } finally {setLoading(false);}
   }
 
@@ -145,7 +146,7 @@ export function AdminGroupDetailPage() {
       setGroup((prev) => {return { ...prev, ...data };});
       show("Group details updated.", "success");
       setEditOpen(false);
-    } catch (err) {setEditError(err?.response?.data?.error || "Could not save group details.");} finally
+    } catch (err) {setEditError(formatError(err, "Could not save group details."));} finally
     {setSavingEdit(false);}
   }
 
@@ -156,7 +157,7 @@ export function AdminGroupDetailPage() {
       await apiClient.post(`/groups/${id}/requests`, { userId: user.id });
       show(`Invitation sent to ${user.fullName}.`, "success");
       await load();
-    } catch (err) {show(err?.response?.data?.error || "Could not send invitation.", "error");} finally
+    } catch (err) {show(formatError(err, "Could not send invitation."), "error");} finally
     {setSaving(null);}
   }
 
@@ -168,7 +169,7 @@ export function AdminGroupDetailPage() {
       await apiClient.delete(`/groups/${id}`);
       show("Group deleted.", "success");
       navigate("/admin/groups");
-    } catch (err) {show(err?.response?.data?.error || "Could not delete group.", "error");} finally
+    } catch (err) {show(formatError(err, "Could not delete group."), "error");} finally
     {setDeleting(false);}
   }
 

@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { apiClient } from "../lib/apiClient";
 import { runCandidateRequestBiometric } from "../lib/webauthn";
+import { formatError } from "../lib/formatError";
 
 export function useCandidateRequests() {
   const [requests, setRequests] = useState([]);
@@ -14,7 +15,7 @@ export function useCandidateRequests() {
       const { data } = await apiClient.get("/candidate-requests");
       setRequests(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError(err?.response?.data?.message || err?.message || "Failed to load requests");
+      setError(formatError(err, "Failed to load requests"));
     } finally {
       setLoading(false);
     }
@@ -37,7 +38,7 @@ export function useCandidateRequests() {
       await fetchRequests();
       return authToken;
     } catch (err) {
-      setError(err?.response?.data?.message || "Failed to accept request");
+      setError(formatError(err, "Failed to accept request"));
       throw err;
     }
   }, [fetchRequests]);
@@ -48,7 +49,7 @@ export function useCandidateRequests() {
         await apiClient.put(`/candidate-requests/${requestId}/reject`, { reason });
         await fetchRequests();
       } catch (err) {
-        setError(err?.response?.data?.message || "Failed to reject request");
+        setError(formatError(err, "Failed to reject request"));
         throw err;
       }
     },

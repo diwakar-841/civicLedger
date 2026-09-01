@@ -9,6 +9,7 @@ import { Spinner } from "../components/shared/Spinner";
 import { UserProfileCard } from "../components/profile/UserProfileCard";
 import { useAuthContext } from "../contexts/AuthContext";
 import { apiClient } from "../lib/apiClient";
+import { formatError } from "../lib/formatError";
 import { fileToCompressedDataUrl } from "../lib/imageUpload";import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
 
 export function ProfilePage() {
@@ -63,10 +64,7 @@ export function ProfilePage() {
       await refreshUser();
       setIsEditing(false);
     } catch (error) {
-      const message =
-      error?.response?.data?.error ||
-      error?.response?.data?.message ||
-      "Failed to save profile";
+      const message = formatError(error, "Failed to save profile");
       console.error("Profile save error:", error);
       setSaveError(message);
     } finally {

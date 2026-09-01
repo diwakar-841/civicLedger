@@ -11,6 +11,7 @@ import { VoterDetailModal } from "../components/admin/VoterDetailModal";
 import { useAuthContext } from "../contexts/AuthContext";
 import { useCandidateRequests } from "../hooks/useCandidateRequests";
 import { apiClient } from "../lib/apiClient";
+import { formatError } from "../lib/formatError";
 import { voterDisplayId } from "../lib/idFormat";import { jsxDEV as _jsxDEV, Fragment as _Fragment } from "react/jsx-dev-runtime";
 
 function statusLabel(status) {
@@ -30,7 +31,7 @@ export function RequestsPage() {
     if (isAdmin) {return;}
     apiClient.get("/groups/requests").
     then(({ data }) => {return setGroupRequests(Array.isArray(data) ? data : []);}).
-    catch((err) => {return setGroupRequestError(err?.response?.data?.error || "Could not load group invitations.");});
+    catch((err) => {return setGroupRequestError(formatError(err, "Could not load group invitations."));});
   }, [isAdmin]);
 
   const pending = requests.filter((request) => {return request.status === "pending";});

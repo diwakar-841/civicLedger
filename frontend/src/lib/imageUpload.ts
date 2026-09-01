@@ -1,11 +1,11 @@
-export async function fileToCompressedDataUrl(file, max = 480) {
-  const dataUrl = await new Promise((resolve, reject) => {
+export async function fileToCompressedDataUrl(file: File, max = 480): Promise<string> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {return resolve(String(reader.result));};
     reader.onerror = () => {return reject(new Error("Could not read the image"));};
     reader.readAsDataURL(file);
   });
-  const image = await new Promise((resolve, reject) => {
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
     img.onload = () => {return resolve(img);};
     img.onerror = () => {return reject(new Error("Unsupported image"));};

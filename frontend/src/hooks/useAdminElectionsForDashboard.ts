@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiClient } from "../lib/apiClient";
+import { formatError } from "../lib/formatError";
 
 export function useAdminElectionsForDashboard() {
   const [elections, setElections] = useState([]);
@@ -13,7 +14,7 @@ export function useAdminElectionsForDashboard() {
       const { data } = await apiClient.get("/admin/elections");
       setElections(Array.isArray(data) ? data : []);
     } catch (err) {
-      const message = err?.response?.data?.message || err?.message || "Could not load elections";
+      const message = formatError(err, "Could not load elections");
       setError(message);
     } finally {
       setLoading(false);

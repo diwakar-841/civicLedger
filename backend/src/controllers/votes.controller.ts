@@ -5,6 +5,7 @@ import { castVote, getMyVoteStatus } from "../services/vote.service";
 import { getPublicContractInfo } from "../services/blockchain.service";
 import { env } from "../config/env";
 import { UnauthorizedError } from "../lib/errors";
+import { verifyJwtPayload } from "../lib/jwt";
 
 export async function vote(req, res, next) {
   try {
@@ -12,7 +13,7 @@ export async function vote(req, res, next) {
 
     let votePayload;
     try {
-      votePayload = jwt.verify(voteToken, env.JWT_SECRET);
+      votePayload = verifyJwtPayload(voteToken, env.JWT_SECRET);
     } catch {
       throw new UnauthorizedError(
         "Invalid or expired vote token — please re-authenticate with your PIN or biometric"

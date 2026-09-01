@@ -3,6 +3,7 @@ import { candidateRequestService } from "../services/candidateRequest.service";
 import { notificationService } from "../services/notification.service";
 import { requireAuth, requireAdmin } from "../middlewares/auth.middleware";
 import { db } from "../../../database/index";
+import { rowsOf } from "../lib/dbRows";
 import { users } from "../../../database/schema/users";
 import { elections } from "../../../database/schema/elections";
 import { eq, sql } from "drizzle-orm";
@@ -57,7 +58,7 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
     const access = electionAccess.rows?.[0] ?? electionAccess[0];
     if (access?.election_type === "group") {
       const member = await db.execute(sql`SELECT 1 FROM group_members WHERE group_id=${access.group_id} AND user_id=${userId} LIMIT 1`);
-      if (!(member.rows ?? member).length) {return res.status(400).json({ error: "Candidates must be members of the election group" });}
+      if (!rowsOf(member).length) {return res.status(400).json({ error: "Candidates must be members of the election group" });}
     }
     if (election.status !== "draft") {
       return res.status(400).json({ error: "Nominations can only be sent for draft elections" });
