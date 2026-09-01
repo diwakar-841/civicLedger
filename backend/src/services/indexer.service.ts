@@ -5,11 +5,16 @@ import { logger } from "../lib/logger";
 export function startIndexer() {
   listenForVoteEvents(async (voter, candidateId, txHash) => {
     try {
-      const existing = await db.query.votesCache.findFirst({ where: (v, { eq }) => {return eq(v.txHash, txHash);} });
-      if (existing) {return;}
+      const existing = await db.query.votesCache.findFirst({
+        where: (v, { eq }) => eq(v.txHash, txHash),
+      });
+      if (existing) return;
 
-      logger.info("Indexed on-chain vote event", { voter, candidateId, txHash });
-
+      logger.info("Indexed on-chain vote event", {
+        voter,
+        candidateId,
+        txHash,
+      });
     } catch (err) {
       logger.error("Failed to index vote event", { error: String(err) });
     }

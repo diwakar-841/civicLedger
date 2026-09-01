@@ -1,11 +1,24 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
 
-const ThemeContext = createContext(undefined);
+type Theme = "light" | "dark";
 
-export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState(() => {
+interface ThemeContextValue {
+  theme: Theme;
+  toggle: () => void;
+}
+
+const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
+
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const [theme, setTheme] = useState<Theme>(() => {
     const stored = localStorage.getItem("cl-theme-v2");
-    if (stored === "light" || stored === "dark") {return stored;}
+    if (stored === "light" || stored === "dark") return stored;
 
     return "light";
   });
@@ -21,20 +34,18 @@ export function ThemeProvider({ children }) {
   }, [theme]);
 
   function toggle() {
-    setTheme((t) => {return t === "dark" ? "light" : "dark";});
+    setTheme((t) => (t === "dark" ? "light" : "dark"));
   }
 
   return (
-    _jsxDEV(ThemeContext.Provider, {
- value: { theme, toggle }, children:
-      children 
-}, void 0, false
-    ));
-
+    <ThemeContext.Provider value={{ theme, toggle }}>
+      {children}
+    </ThemeContext.Provider>
+  );
 }
 
 export function useTheme() {
   const ctx = useContext(ThemeContext);
-  if (!ctx) {throw new Error("useTheme must be used within ThemeProvider");}
+  if (!ctx) throw new Error("useTheme must be used within ThemeProvider");
   return ctx;
 }

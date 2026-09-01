@@ -2,6 +2,17 @@ import { db } from "@voting/database";
 import { sql } from "drizzle-orm";
 import { logger } from "./logger";
 
+export type GroupActivityType =
+  | "group_created"
+  | "group_updated"
+  | "group_deleted"
+  | "invitation_sent"
+  | "invitation_accepted"
+  | "invitation_rejected"
+  | "member_removed"
+  | "election_created"
+  | "admin_action";
+
 export async function runGroupActivityMigrations() {
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS group_activity (
@@ -17,12 +28,21 @@ export async function runGroupActivityMigrations() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
-  await db.execute(sql`CREATE INDEX IF NOT EXISTS group_activity_group_idx ON group_activity (group_id, created_at DESC)`);
+  await db.execute(
+    sql`CREATE INDEX IF NOT EXISTS group_activity_group_idx ON group_activity (group_id, created_at DESC)`,
+  );
 }
 
-export async function logGroupActivity(entry)
-
-{
+export async function logGroupActivity(entry: {
+  groupId: string;
+  type: GroupActivityType;
+  actorId?: string | null;
+  actorName?: string | null;
+  targetUserId?: string | null;
+  targetName?: string | null;
+  targetEmail?: string | null;
+  detail?: string | null;
+}) {
   try {
     await db.execute(sql`
       INSERT INTO group_activity (group_id, type, actor_id, actor_name, target_user_id, target_name, target_email, detail)
@@ -32,13 +52,18 @@ export async function logGroupActivity(entry)
       )
     `);
   } catch (err) {
-
+    // History must never break the action it describes.
     logger.error("Could not record group activity", { err });
   }
 }
 
-export async function describeUser(userId) {
-  const result = await db.execute(sql`SELECT id, full_name, email FROM users WHERE id=${userId}`);
+/** Convenience: resolve a user's display name/email for the activity row. */
+export async function describeUser(userId: string) {
+  const result: any = await db.execute(
+    sql`SELECT id, full_name, email FROM users WHERE id=${userId}`,
+  );
   const row = (result.rows ?? result)[0];
-  return row ? { name: row.full_name, email: row.email } : { name: null, email: null };
+  return row
+    ? { name: row.full_name as string, email: row.email as string }
+    : { name: null, email: null };
 }

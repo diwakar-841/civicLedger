@@ -4,7 +4,10 @@ import { elections } from "../../../database/schema/elections";
 import { candidateRequests } from "../../../database/schema/candidateRequests";
 import { notificationService } from "../services/notification.service";
 import { getNominationStatus } from "../services/nominationStatus.service";
-import { setLiveResults, setResultsReleaseAt } from "../services/election.service";
+import {
+  setLiveResults,
+  setResultsReleaseAt,
+} from "../services/election.service";
 import { recordAudit } from "../lib/audit";
 import { logger } from "../lib/logger";
 import { eq, and, count, isNotNull, isNull, inArray } from "drizzle-orm";
@@ -26,102 +29,104 @@ import {
   START_TIME_GRACE_MS,
   canExtendAllowance as extensionAllowed,
   isDecisionWindowExpired,
-  formatDuration 
-} from
-"../lib/electionTiming";
+  formatDuration,
+} from "../lib/electionTiming";
 
 const router = Router();
 
 router.use(requireAuth, requireAdmin);
 
-function actorOf(req) {
-  return req.user?.userId ?? "system";
+function actorOf(req: Request): string {
+  return (req as any).user?.userId ?? "system";
 }
 
-router.get("/draft", async (req, res) => {
+router.get("/draft", async (req: Request, res: Response) => {
   try {
-    const draftElections = await db.
-    select().
-    from(elections).
-    where(eq(elections.status, "draft"));
+    const draftElections = await db
+      .select()
+      .from(elections)
+      .where(eq(elections.status, "draft"));
 
     const enriched = await Promise.all(
       draftElections.map(async (election) => {
-        const [{ acceptedCount }] = await db.
-        select({ acceptedCount: count() }).
-        from(candidateRequests).
-        where(
-          and(
-            eq(candidateRequests.electionId, election.id),
-            eq(candidateRequests.status, "accepted")
-          )
-        );
+        const [{ acceptedCount }] = await db
+          .select({ acceptedCount: count() })
+          .from(candidateRequests)
+          .where(
+            and(
+              eq(candidateRequests.electionId, election.id),
+              eq(candidateRequests.status, "accepted"),
+            ),
+          );
 
-        const [{ profileCompletedCount }] = await db.
-        select({ profileCompletedCount: count() }).
-        from(candidateRequests).
-        where(
-          and(
-            eq(candidateRequests.electionId, election.id),
-            eq(candidateRequests.status, "accepted"),
-            isNotNull(candidateRequests.profileCompletedAt)
-          )
-        );
+        const [{ profileCompletedCount }] = await db
+          .select({ profileCompletedCount: count() })
+          .from(candidateRequests)
+          .where(
+            and(
+              eq(candidateRequests.electionId, election.id),
+              eq(candidateRequests.status, "accepted"),
+              isNotNull(candidateRequests.profileCompletedAt),
+            ),
+          );
 
-        const [{ pendingCount }] = await db.
-        select({ pendingCount: count() }).
-        from(candidateRequests).
-        where(
-          and(
-            eq(candidateRequests.electionId, election.id),
-            eq(candidateRequests.status, "pending")
-          )
-        );
+        const [{ pendingCount }] = await db
+          .select({ pendingCount: count() })
+          .from(candidateRequests)
+          .where(
+            and(
+              eq(candidateRequests.electionId, election.id),
+              eq(candidateRequests.status, "pending"),
+            ),
+          );
 
-        const [{ rejectedCount }] = await db.
-        select({ rejectedCount: count() }).
-        from(candidateRequests).
-        where(
-          and(
-            eq(candidateRequests.electionId, election.id),
-            eq(candidateRequests.status, "rejected")
-          )
-        );
+        const [{ rejectedCount }] = await db
+          .select({ rejectedCount: count() })
+          .from(candidateRequests)
+          .where(
+            and(
+              eq(candidateRequests.electionId, election.id),
+              eq(candidateRequests.status, "rejected"),
+            ),
+          );
 
-        const [{ expiredCount }] = await db.
-        select({ expiredCount: count() }).
-        from(candidateRequests).
-        where(
-          and(
-            eq(candidateRequests.electionId, election.id),
-            eq(candidateRequests.status, "expired")
-          )
-        );
+        const [{ expiredCount }] = await db
+          .select({ expiredCount: count() })
+          .from(candidateRequests)
+          .where(
+            and(
+              eq(candidateRequests.electionId, election.id),
+              eq(candidateRequests.status, "expired"),
+            ),
+          );
 
-        const [{ remindableCount }] = await db.
-        select({ remindableCount: count() }).
-        from(candidateRequests).
-        where(
-          and(
-            eq(candidateRequests.electionId, election.id),
-            eq(candidateRequests.status, "pending"),
-            isNull(candidateRequests.respondedAt),
-            isNull(candidateRequests.reminderSentAt)
-          )
-        );
+        const [{ remindableCount }] = await db
+          .select({ remindableCount: count() })
+          .from(candidateRequests)
+          .where(
+            and(
+              eq(candidateRequests.electionId, election.id),
+              eq(candidateRequests.status, "pending"),
+              isNull(candidateRequests.respondedAt),
+              isNull(candidateRequests.reminderSentAt),
+            ),
+          );
 
-        const [{ totalCount }] = await db.
-        select({ totalCount: count() }).
-        from(candidateRequests).
-        where(eq(candidateRequests.electionId, election.id));
+        const [{ totalCount }] = await db
+          .select({ totalCount: count() })
+          .from(candidateRequests)
+          .where(eq(candidateRequests.electionId, election.id));
 
         const noResponseCount = Number(pendingCount) + Number(expiredCount);
         const enoughAccepted = Number(acceptedCount) >= MIN_ACCEPTED_CANDIDATES;
 
         const allowanceEnded = Boolean(
-          election.nominationDeadline && new Date(election.nominationDeadline) <= new Date()
+          election.nominationDeadline &&
+          new Date(election.nominationDeadline) <= new Date(),
         );
-        const decisionWindowOpen = isAdminDecisionWindowOpen(election.nominationDeadline);
+        const decisionWindowOpen = isAdminDecisionWindowOpen(
+          election.nominationDeadline,
+        );
 
         return {
           ...election,
@@ -138,19 +143,19 @@ router.get("/draft", async (req, res) => {
           readyToActivate: enoughAccepted && decisionWindowOpen,
           canStartVoting: enoughAccepted && decisionWindowOpen,
           canExtend: extensionAllowed({
-            decisionPhase: election.decisionPhase,
-            allowanceExtendedAt: election.allowanceExtendedAt,
+            decisionPhase: (election as any).decisionPhase,
+            allowanceExtendedAt: (election as any).allowanceExtendedAt,
             noResponseCount,
-            nominationDeadline: election.nominationDeadline
+            nominationDeadline: election.nominationDeadline,
           }),
           extensionUsed:
-          Boolean(election.allowanceExtendedAt) ||
-          election.decisionPhase === "final",
-          decisionPhase: election.decisionPhase ?? "initial",
+            Boolean((election as any).allowanceExtendedAt) ||
+            (election as any).decisionPhase === "final",
+          decisionPhase: (election as any).decisionPhase ?? "initial",
           canCancel: allowanceEnded,
-          mustClose: !enoughAccepted && allowanceEnded
+          mustClose: !enoughAccepted && allowanceEnded,
         };
-      })
+      }),
     );
 
     res.json(enriched);
@@ -160,20 +165,23 @@ router.get("/draft", async (req, res) => {
   }
 });
 
-router.get("/:electionId/nomination-status", async (req, res) => {
-  try {
-    const status = await getNominationStatus(req.params.electionId);
-    res.json(status);
-  } catch (error) {
-    if (error?.statusCode === 404 || error?.name === "NotFoundError") {
-      return res.status(404).json({ error: "Election not found" });
+router.get(
+  "/:electionId/nomination-status",
+  async (req: Request, res: Response) => {
+    try {
+      const status = await getNominationStatus(req.params.electionId);
+      res.json(status);
+    } catch (error: any) {
+      if (error?.statusCode === 404 || error?.name === "NotFoundError") {
+        return res.status(404).json({ error: "Election not found" });
+      }
+      console.error("[admin] Error loading nomination status:", error);
+      res.status(500).json({ error: "Failed to load nomination status" });
     }
-    console.error("[admin] Error loading nomination status:", error);
-    res.status(500).json({ error: "Failed to load nomination status" });
-  }
-});
+  },
+);
 
-router.get("/:electionId/status", async (req, res) => {
+router.get("/:electionId/status", async (req: Request, res: Response) => {
   try {
     const s = await getNominationStatus(req.params.electionId);
     res.json({
@@ -184,20 +192,25 @@ router.get("/:electionId/status", async (req, res) => {
       rejected: s.rejectedCount,
       noResponse: s.noResponseCount,
       profileCompleted: s.profileCompletedCount,
-      candidates: s.candidates.map((c) => {return {
-          requestId: c.requestId,
-          userId: c.userId,
-          name: c.name,
-          status: c.rawStatus,
-          displayStatus:
-          c.status === "accepted" ? "Accepted" : c.status === "rejected" ? "Rejected" : "No Response",
-          profileCompleted: Boolean(c.profileCompletedAt),
-          respondedAt: c.respondedAt
-        };}),
+      candidates: s.candidates.map((c) => ({
+        requestId: c.requestId,
+        userId: c.userId,
+        name: c.name,
+        status: c.rawStatus,
+        displayStatus:
+          c.status === "accepted"
+            ? "Accepted"
+            : c.status === "rejected"
+              ? "Rejected"
+              : "No Response",
+        profileCompleted: Boolean(c.profileCompletedAt),
+        respondedAt: c.respondedAt,
+      })),
       canStartVoting: s.canStartVoting,
       canExtend: s.canExtendAllowance,
       canCancel: s.canCloseElection,
-      mustClose: s.canCloseElection && s.acceptedCount < MIN_ACCEPTED_CANDIDATES,
+      mustClose:
+        s.canCloseElection && s.acceptedCount < MIN_ACCEPTED_CANDIDATES,
       status: s.status,
       allowanceEnded: s.allowanceEnded,
       nominationDeadline: s.nominationDeadline,
@@ -207,9 +220,9 @@ router.get("/:electionId/status", async (req, res) => {
       adminWindowEndsAt: s.adminWindowEndsAt,
       rules: s.rules,
       recommendationTitle: s.recommendationTitle,
-      recommendation: s.recommendation
+      recommendation: s.recommendation,
     });
-  } catch (error) {
+  } catch (error: any) {
     if (error?.statusCode === 404 || error?.name === "NotFoundError") {
       return res.status(404).json({ error: "Election not found" });
     }
@@ -218,45 +231,65 @@ router.get("/:electionId/status", async (req, res) => {
   }
 });
 
-const extendAllowanceHandler = async (req, res) => {
-
+const extendAllowanceHandler = async (req: Request, res: Response) => {
   try {
     const { electionId } = req.params;
     const minutes = Number(req.body?.minutes);
 
-    if (!Number.isFinite(minutes) || minutes < MIN_EXTENSION_MINUTES || minutes > MAX_EXTENSION_MINUTES) {
-      return res.status(400).json({ error: `The extension must be between ${formatDuration(MIN_EXTENSION_MINUTES)} and ${formatDuration(MAX_EXTENSION_MINUTES)}.` });
+    if (
+      !Number.isFinite(minutes) ||
+      minutes < MIN_EXTENSION_MINUTES ||
+      minutes > MAX_EXTENSION_MINUTES
+    ) {
+      return res.status(400).json({
+        error: `The extension must be between ${formatDuration(MIN_EXTENSION_MINUTES)} and ${formatDuration(MAX_EXTENSION_MINUTES)}.`,
+      });
     }
 
-    const [election] = await db.select().from(elections).where(eq(elections.id, electionId));
-    if (!election) {return res.status(404).json({ error: "Election not found" });}
+    const [election] = await db
+      .select()
+      .from(elections)
+      .where(eq(elections.id, electionId));
+    if (!election) return res.status(404).json({ error: "Election not found" });
     if (election.status !== "draft") {
-      return res.status(400).json({ error: "Only elections that haven't started can be extended." });
+      return res
+        .status(400)
+        .json({
+          error: "Only elections that haven't started can be extended.",
+        });
     }
 
     if (!isAdminDecisionWindowOpen(election.nominationDeadline)) {
       return res.status(400).json({
-        error: election.nominationDeadline && new Date(election.nominationDeadline) > new Date() ?
-        "The allowance period is still active — it can only be extended after it ends." :
-        "The 24-hour admin decision period has expired — the allowance period can no longer be extended."
+        error:
+          election.nominationDeadline &&
+          new Date(election.nominationDeadline) > new Date()
+            ? "The allowance period is still active — it can only be extended after it ends."
+            : "The 24-hour admin decision period has expired — the allowance period can no longer be extended.",
       });
     }
 
-    if (election.allowanceExtendedAt || election.decisionPhase === "final") {
+    if (
+      (election as any).allowanceExtendedAt ||
+      (election as any).decisionPhase === "final"
+    ) {
       return res.status(400).json({
         error:
-        "The allowance period has already been extended once. This is the final admin decision period — you can only start voting or cancel the election."
+          "The allowance period has already been extended once. This is the final admin decision period — you can only start voting or cancel the election.",
       });
     }
 
     const status = await getNominationStatus(electionId);
     if (status.profileCompletedCount >= 2) {
-      return res.status(400).json({ error: "This election has enough eligible candidates to proceed and cannot be cancelled for insufficient candidates." });
+      return res.status(400).json({
+        error:
+          "This election has enough eligible candidates to proceed and cannot be cancelled for insufficient candidates.",
+      });
     }
     if (status.noResponseCount === 0) {
       return res.status(400).json({
         error:
-        "The allowance period can't be extended — every invited candidate has already responded. Rejected candidates are never re-invited."
+          "The allowance period can't be extended — every invited candidate has already responded. Rejected candidates are never re-invited.",
       });
     }
 
@@ -264,45 +297,51 @@ const extendAllowanceHandler = async (req, res) => {
     const { startTime, endTime } = recalculateVotingWindow(
       newDeadline,
       election.startTime ? new Date(election.startTime) : null,
-      election.endTime ? new Date(election.endTime) : null
+      election.endTime ? new Date(election.endTime) : null,
     );
 
-    const noResponseIds = status.candidates.
-    filter((c) => {return c.status === "no_response";}).
-    map((c) => {return c.requestId;});
+    const noResponseIds = status.candidates
+      .filter((c) => c.status === "no_response")
+      .map((c) => c.requestId);
 
     if (noResponseIds.length > 0) {
-      await db.
-      update(candidateRequests).
-      set({ status: "pending", expiresAt: newDeadline, updatedAt: new Date() }).
-      where(inArray(candidateRequests.id, noResponseIds));
+      await db
+        .update(candidateRequests)
+        .set({
+          status: "pending",
+          expiresAt: newDeadline,
+          updatedAt: new Date(),
+        })
+        .where(inArray(candidateRequests.id, noResponseIds));
     }
 
-    await db.
-    update(elections).
-    set({
-      nominationDeadline: newDeadline,
-      nominationAlertSent: false,
+    await db
+      .update(elections)
+      .set({
+        nominationDeadline: newDeadline,
+        nominationAlertSent: false,
 
-      decisionPhase: "final",
-      allowanceExtendedAt: new Date(),
-      allowanceExtensionMinutes: String(minutes),
+        decisionPhase: "final",
+        allowanceExtendedAt: new Date(),
+        allowanceExtensionMinutes: String(minutes),
 
-      decisionPeriodNotifiedAt: null,
+        decisionPeriodNotifiedAt: null,
 
-      startTime,
-      endTime
-    }).
-    where(eq(elections.id, electionId));
+        startTime,
+        endTime,
+      })
+      .where(eq(elections.id, electionId));
 
-    for (const candidate of status.candidates.filter((c) => {return c.status === "no_response";})) {
+    for (const candidate of status.candidates.filter(
+      (c) => c.status === "no_response",
+    )) {
       await notificationService.createNotification(
         candidate.userId,
         "nominationReminder",
         "Nomination deadline extended",
         `You still have time to respond to your nomination for "${election.title}". New deadline: ${newDeadline.toLocaleString()}`,
         electionId,
-        { electionId, requestId: candidate.requestId }
+        { electionId, requestId: candidate.requestId },
       );
     }
 
@@ -312,7 +351,7 @@ const extendAllowanceHandler = async (req, res) => {
       newDeadline: newDeadline.toISOString(),
       startTime: startTime ? startTime.toISOString() : null,
       endTime: endTime ? endTime.toISOString() : null,
-      notifiedCandidates: noResponseIds.length
+      notifiedCandidates: noResponseIds.length,
     });
 
     res.json({
@@ -322,7 +361,7 @@ const extendAllowanceHandler = async (req, res) => {
       startTime,
       endTime,
       earliestVotingStart: earliestVotingStart(newDeadline),
-      extendedFor: noResponseIds.length
+      extendedFor: noResponseIds.length,
     });
   } catch (error) {
     console.error("[admin] Error extending allowance:", error);
@@ -332,280 +371,383 @@ const extendAllowanceHandler = async (req, res) => {
 
 router.post("/:electionId/extend-allowance", extendAllowanceHandler);
 
-router.post("/:electionId/extend-deadline", (req, res) => {
-
+router.post("/:electionId/extend-deadline", (req: Request, res: Response) => {
   const minutes = Number(req.body?.minutes);
   const hours = Number(req.body?.hours);
   req.body = {
-    minutes: Number.isFinite(minutes) && minutes > 0 ?
-    Math.round(minutes) :
-    Math.round((Number.isFinite(hours) && hours > 0 ? hours : 24) * 60)
+    minutes:
+      Number.isFinite(minutes) && minutes > 0
+        ? Math.round(minutes)
+        : Math.round((Number.isFinite(hours) && hours > 0 ? hours : 24) * 60),
   };
   return extendAllowanceHandler(req, res);
 });
 
-router.post("/:electionId/start-voting", async (req, res) => {
-  try {
-    const { electionId } = req.params;
-
-    const [election] = await db.select().from(elections).where(eq(elections.id, electionId));
-    if (!election) {return res.status(404).json({ error: "Election not found" });}
-    if (election.status !== "draft") {
-      return res.status(400).json({ error: "This election has already started." });
-    }
-
-    if (election.startTime && election.endTime) {
-      return res.status(400).json({ error: `Voting is already scheduled for ${new Date(election.startTime).toISOString()}. Extend the allowance period or close the election instead.` });
-    }
-    if (!isAdminDecisionWindowOpen(election.nominationDeadline)) {
-      return res.status(400).json({ error: "Voting can only be scheduled during the 24-hour admin action window after the allowance period." });
-    }
-
-    const status = await getNominationStatus(electionId);
-    if (status.acceptedCount < MIN_ACCEPTED_CANDIDATES) {
-      return res.status(400).json({ error: `Voting cannot begin because fewer than ${MIN_ACCEPTED_CANDIDATES} candidates have accepted the nomination (${status.acceptedCount} accepted).` });
-    }
-
-    if (status.profileCompletedCount < MIN_ACCEPTED_CANDIDATES) {
-      return res.status(400).json({ error: `Voting cannot begin until at least ${MIN_ACCEPTED_CANDIDATES} accepted candidates have completed their candidate profile (${status.profileCompletedCount} completed).` });
-    }
-
-    if (!req.body?.startTime || !req.body?.endTime) {
-      return res.status(400).json({ error: "Choose a voting start and end time before starting voting." });
-    }
-    const startTime = new Date(req.body.startTime);
-    const endTime = new Date(req.body.endTime);
-    if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
-      return res.status(400).json({ error: "Voting start and end must be valid dates." });
-    }
-    const votingErrors = validateVotingWindow(startTime, endTime);
-    if (votingErrors.length) {return res.status(400).json({ error: votingErrors.join(" ") });}
-
-    const resultsMode = req.body?.resultsMode === "manual" ? "manual" : "live";
-    let resultsReleaseAt = null;
-    if (resultsMode === "manual") {
-      if (!req.body?.resultsReleaseAt) {
-        return res.status(400).json({ error: "Choose a results release date, or switch to live results." });
-      }
-      resultsReleaseAt = new Date(req.body.resultsReleaseAt);
-      if (Number.isNaN(resultsReleaseAt.getTime())) {
-        return res.status(400).json({ error: "Results release date must be a valid date." });
-      }
-      if (resultsReleaseAt.getTime() <= endTime.getTime()) {
-        return res.status(400).json({ error: "Results release date must be after the voting end time." });
-      }
-    }
-
-    const now = new Date();
-
-    const startsNow = startTime.getTime() <= now.getTime() + START_TIME_GRACE_MS;
-
-    await db.
-    update(candidateRequests).
-    set({ status: "expired", updatedAt: now }).
-    where(
-      and(eq(candidateRequests.electionId, electionId), eq(candidateRequests.status, "pending"))
-    );
-
+router.post(
+  "/:electionId/start-voting",
+  async (req: Request, res: Response) => {
     try {
-      const { setElectionOpen } = await import("../services/blockchain.service");
-      if (startsNow) {await setElectionOpen(true);}
-    } catch (err) {
-      logger.error("Failed to open voting on-chain — election NOT activated", {
+      const { electionId } = req.params;
+
+      const [election] = await db
+        .select()
+        .from(elections)
+        .where(eq(elections.id, electionId));
+      if (!election)
+        return res.status(404).json({ error: "Election not found" });
+      if (election.status !== "draft") {
+        return res
+          .status(400)
+          .json({ error: "This election has already started." });
+      }
+
+      if (election.startTime && election.endTime) {
+        return res.status(400).json({
+          error: `Voting is already scheduled for ${new Date(election.startTime).toISOString()}. Extend the allowance period or close the election instead.`,
+        });
+      }
+      if (!isAdminDecisionWindowOpen(election.nominationDeadline)) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "Voting can only be scheduled during the 24-hour admin action window after the allowance period.",
+          });
+      }
+
+      const status = await getNominationStatus(electionId);
+      if (status.acceptedCount < MIN_ACCEPTED_CANDIDATES) {
+        return res.status(400).json({
+          error: `Voting cannot begin because fewer than ${MIN_ACCEPTED_CANDIDATES} candidates have accepted the nomination (${status.acceptedCount} accepted).`,
+        });
+      }
+
+      if (status.profileCompletedCount < MIN_ACCEPTED_CANDIDATES) {
+        return res.status(400).json({
+          error: `Voting cannot begin until at least ${MIN_ACCEPTED_CANDIDATES} accepted candidates have completed their candidate profile (${status.profileCompletedCount} completed).`,
+        });
+      }
+
+      if (!req.body?.startTime || !req.body?.endTime) {
+        return res.status(400).json({
+          error: "Choose a voting start and end time before starting voting.",
+        });
+      }
+      const startTime = new Date(req.body.startTime);
+      const endTime = new Date(req.body.endTime);
+      if (
+        Number.isNaN(startTime.getTime()) ||
+        Number.isNaN(endTime.getTime())
+      ) {
+        return res
+          .status(400)
+          .json({ error: "Voting start and end must be valid dates." });
+      }
+      const votingErrors = validateVotingWindow(startTime, endTime);
+      if (votingErrors.length)
+        return res.status(400).json({ error: votingErrors.join(" ") });
+
+      const resultsMode =
+        req.body?.resultsMode === "manual" ? "manual" : "live";
+      let resultsReleaseAt: Date | null = null;
+      if (resultsMode === "manual") {
+        if (!req.body?.resultsReleaseAt) {
+          return res.status(400).json({
+            error: "Choose a results release date, or switch to live results.",
+          });
+        }
+        resultsReleaseAt = new Date(req.body.resultsReleaseAt);
+        if (Number.isNaN(resultsReleaseAt.getTime())) {
+          return res
+            .status(400)
+            .json({ error: "Results release date must be a valid date." });
+        }
+        if (resultsReleaseAt.getTime() <= endTime.getTime()) {
+          return res
+            .status(400)
+            .json({
+              error: "Results release date must be after the voting end time.",
+            });
+        }
+      }
+
+      const now = new Date();
+
+      const startsNow =
+        startTime.getTime() <= now.getTime() + START_TIME_GRACE_MS;
+
+      await db
+        .update(candidateRequests)
+        .set({ status: "expired", updatedAt: now })
+        .where(
+          and(
+            eq(candidateRequests.electionId, electionId),
+            eq(candidateRequests.status, "pending"),
+          ),
+        );
+
+      try {
+        const { setElectionOpen } =
+          await import("../services/blockchain.service");
+        if (startsNow) await setElectionOpen(true);
+      } catch (err) {
+        logger.error(
+          "Failed to open voting on-chain — election NOT activated",
+          {
+            electionId,
+            error: String(err),
+          },
+        );
+        return res
+          .status(502)
+          .json({
+            error:
+              "Could not open voting on-chain. Please try again in a moment.",
+          });
+      }
+
+      const [updated] = await db
+        .update(elections)
+        .set({
+          startTime,
+          endTime,
+          status: startsNow ? "active" : "draft",
+          nominationAlertSent: true,
+        })
+        .where(eq(elections.id, electionId))
+        .returning();
+
+      await recordAudit(actorOf(req), "ELECTION_STATUS_CHANGED", {
         electionId,
-        error: String(err)
+        from: "draft",
+        to: startsNow ? "active" : "draft",
+        reason: "admin_started_voting",
+        accepted: status.acceptedCount,
       });
-      return res.
-      status(502).
-      json({ error: "Could not open voting on-chain. Please try again in a moment." });
+
+      await notificationService.notifyElectionParticipants(
+        electionId,
+        election.title,
+        startsNow
+          ? `Voting is now open for "${election.title}".`
+          : `Voting is scheduled for "${election.title}" at ${startTime.toLocaleString()}.`,
+      );
+
+      const withResults =
+        resultsMode === "live"
+          ? await setLiveResults(electionId, true, actorOf(req))
+          : await setResultsReleaseAt(
+              electionId,
+              resultsReleaseAt,
+              actorOf(req),
+            );
+
+      res.json({ success: true, election: { ...updated, ...withResults } });
+    } catch (error) {
+      console.error("[admin] Error starting voting:", error);
+      res.status(500).json({ error: "Failed to start voting" });
     }
+  },
+);
 
-    const [updated] = await db.
-    update(elections).
-    set({
+router.post(
+  "/:electionId/results-settings",
+  async (req: Request, res: Response) => {
+    try {
+      const { electionId } = req.params;
 
-      startTime,
-      endTime,
-      status: startsNow ? "active" : "draft",
-      nominationAlertSent: true
-    }).
-    where(eq(elections.id, electionId)).
-    returning();
+      const [election] = await db
+        .select()
+        .from(elections)
+        .where(eq(elections.id, electionId));
+      if (!election)
+        return res.status(404).json({ error: "Election not found" });
+      if (!election.startTime || !election.endTime) {
+        return res.status(400).json({
+          error:
+            "Set the voting start and end time before configuring results.",
+        });
+      }
 
-    await recordAudit(actorOf(req), "ELECTION_STATUS_CHANGED", {
-      electionId,
-      from: "draft",
-      to: startsNow ? "active" : "draft",
-      reason: "admin_started_voting",
-      accepted: status.acceptedCount
-    });
+      const mode = req.body?.mode;
+      if (mode !== "live" && mode !== "manual") {
+        return res
+          .status(400)
+          .json({ error: 'mode must be "live" or "manual".' });
+      }
 
-    await notificationService.notifyElectionParticipants(
-      electionId,
-      election.title,
-      startsNow ?
-      `Voting is now open for "${election.title}".` :
-      `Voting is scheduled for "${election.title}" at ${startTime.toLocaleString()}.`
-    );
+      if (mode === "live") {
+        const updated = await setLiveResults(electionId, true, actorOf(req));
+        return res.json({ success: true, election: updated });
+      }
 
-    const withResults =
-    resultsMode === "live" ?
-    await setLiveResults(electionId, true, actorOf(req)) :
-    await setResultsReleaseAt(electionId, resultsReleaseAt, actorOf(req));
+      if (!req.body?.resultsReleaseAt) {
+        return res
+          .status(400)
+          .json({ error: "Provide a results release date." });
+      }
+      const resultsReleaseAt = new Date(req.body.resultsReleaseAt);
+      if (Number.isNaN(resultsReleaseAt.getTime())) {
+        return res
+          .status(400)
+          .json({ error: "Results release date must be a valid date." });
+      }
 
-    res.json({ success: true, election: { ...updated, ...withResults } });
-  } catch (error) {
-    console.error("[admin] Error starting voting:", error);
-    res.status(500).json({ error: "Failed to start voting" });
-  }
-});
+      if (election.liveResultsEnabled) {
+        await setLiveResults(electionId, false, actorOf(req));
+      }
+      const updated = await setResultsReleaseAt(
+        electionId,
+        resultsReleaseAt,
+        actorOf(req),
+      );
+      res.json({ success: true, election: updated });
+    } catch (error: any) {
+      if (error?.statusCode) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+      console.error("[admin] Error updating results settings:", error);
+      res.status(500).json({ error: "Failed to update results settings" });
+    }
+  },
+);
 
-router.post("/:electionId/results-settings", async (req, res) => {
+router.post(
+  "/:electionId/resend-nominations",
+  async (req: Request, res: Response) => {
+    try {
+      const { electionId } = req.params;
+
+      const [election] = await db
+        .select()
+        .from(elections)
+        .where(eq(elections.id, electionId));
+
+      if (!election)
+        return res.status(404).json({ error: "Election not found" });
+      if (election.status !== "draft") {
+        return res
+          .status(400)
+          .json({ error: "Reminders can only be sent for draft elections" });
+      }
+      if (
+        election.nominationDeadline &&
+        new Date(election.nominationDeadline) <= new Date()
+      ) {
+        return res.status(400).json({
+          error:
+            "The candidate allowance period has ended — reminders can no longer be sent.",
+        });
+      }
+
+      const remindable = await db
+        .select()
+        .from(candidateRequests)
+        .where(
+          and(
+            eq(candidateRequests.electionId, electionId),
+            eq(candidateRequests.status, "pending"),
+            isNull(candidateRequests.respondedAt),
+            isNull(candidateRequests.reminderSentAt),
+          ),
+        );
+
+      if (remindable.length === 0) {
+        return res.status(400).json({
+          error:
+            "Every nominee awaiting a response has already received their one reminder — no further reminders can be sent.",
+        });
+      }
+
+      const now = new Date();
+      for (const request of remindable) {
+        await notificationService.createNotification(
+          request.userId,
+          "nominationReminder",
+          "Reminder: Respond to your nomination",
+          `Please accept or decline your nomination for "${election.title}". Deadline: ${new Date(request.expiresAt).toLocaleString()}`,
+          electionId,
+          { electionId, requestId: request.id },
+        );
+        await db
+          .update(candidateRequests)
+          .set({ reminderSentAt: now, updatedAt: now })
+          .where(eq(candidateRequests.id, request.id));
+      }
+
+      await recordAudit(actorOf(req), "NOMINATION_REMINDERS_SENT", {
+        electionId,
+        remindersSent: remindable.length,
+      });
+
+      res.json({
+        success: true,
+        remindersSent: remindable.length,
+        remindersRemaining: 0,
+      });
+    } catch (error) {
+      console.error("[admin] Error sending nomination reminders:", error);
+      res.status(500).json({ error: "Failed to send reminders" });
+    }
+  },
+);
+
+const cancelElectionHandler = async (req: Request, res: Response) => {
   try {
     const { electionId } = req.params;
 
-    const [election] = await db.select().from(elections).where(eq(elections.id, electionId));
-    if (!election) {return res.status(404).json({ error: "Election not found" });}
-    if (!election.startTime || !election.endTime) {
-      return res.status(400).json({ error: "Set the voting start and end time before configuring results." });
-    }
+    const [election] = await db
+      .select()
+      .from(elections)
+      .where(eq(elections.id, electionId));
 
-    const mode = req.body?.mode;
-    if (mode !== "live" && mode !== "manual") {
-      return res.status(400).json({ error: 'mode must be "live" or "manual".' });
+    if (!election) return res.status(404).json({ error: "Election not found" });
+    if (election.status === "cancelled") {
+      return res
+        .status(400)
+        .json({ error: "This election has already been cancelled." });
     }
-
-    if (mode === "live") {
-      const updated = await setLiveResults(electionId, true, actorOf(req));
-      return res.json({ success: true, election: updated });
-    }
-
-    if (!req.body?.resultsReleaseAt) {
-      return res.status(400).json({ error: "Provide a results release date." });
-    }
-    const resultsReleaseAt = new Date(req.body.resultsReleaseAt);
-    if (Number.isNaN(resultsReleaseAt.getTime())) {
-      return res.status(400).json({ error: "Results release date must be a valid date." });
-    }
-
-    if (election.liveResultsEnabled) {
-      await setLiveResults(electionId, false, actorOf(req));
-    }
-    const updated = await setResultsReleaseAt(electionId, resultsReleaseAt, actorOf(req));
-    res.json({ success: true, election: updated });
-  } catch (error) {
-    if (error?.statusCode) {
-      return res.status(error.statusCode).json({ error: error.message });
-    }
-    console.error("[admin] Error updating results settings:", error);
-    res.status(500).json({ error: "Failed to update results settings" });
-  }
-});
-
-router.post("/:electionId/resend-nominations", async (req, res) => {
-  try {
-    const { electionId } = req.params;
-
-    const [election] = await db.
-    select().
-    from(elections).
-    where(eq(elections.id, electionId));
-
-    if (!election) {return res.status(404).json({ error: "Election not found" });}
     if (election.status !== "draft") {
-      return res.status(400).json({ error: "Reminders can only be sent for draft elections" });
-    }
-    if (election.nominationDeadline && new Date(election.nominationDeadline) <= new Date()) {
-      return res.status(400).json({ error: "The candidate allowance period has ended — reminders can no longer be sent." });
+      return res.status(400).json({
+        error: "Only elections that haven't started voting can be cancelled.",
+      });
     }
 
-    const remindable = await db.
-    select().
-    from(candidateRequests).
-    where(
-      and(
-        eq(candidateRequests.electionId, electionId),
-        eq(candidateRequests.status, "pending"),
-        isNull(candidateRequests.respondedAt),
-        isNull(candidateRequests.reminderSentAt)
-      )
-    );
-
-    if (remindable.length === 0) {
+    if (
+      election.nominationDeadline &&
+      new Date(election.nominationDeadline) > new Date()
+    ) {
       return res.status(400).json({
         error:
-        "Every nominee awaiting a response has already received their one reminder — no further reminders can be sent."
+          "This election can't be cancelled while the candidate allowance period is still active.",
       });
-    }
-
-    const now = new Date();
-    for (const request of remindable) {
-      await notificationService.createNotification(
-        request.userId,
-        "nominationReminder",
-        "Reminder: Respond to your nomination",
-        `Please accept or decline your nomination for "${election.title}". Deadline: ${new Date(request.expiresAt).toLocaleString()}`,
-        electionId,
-        { electionId, requestId: request.id }
-      );
-      await db.
-      update(candidateRequests).
-      set({ reminderSentAt: now, updatedAt: now }).
-      where(eq(candidateRequests.id, request.id));
-    }
-
-    await recordAudit(actorOf(req), "NOMINATION_REMINDERS_SENT", {
-      electionId,
-      remindersSent: remindable.length
-    });
-
-    res.json({ success: true, remindersSent: remindable.length, remindersRemaining: 0 });
-  } catch (error) {
-    console.error("[admin] Error sending nomination reminders:", error);
-    res.status(500).json({ error: "Failed to send reminders" });
-  }
-});
-
-const cancelElectionHandler = async (req, res) => {
-  try {
-    const { electionId } = req.params;
-
-    const [election] = await db.
-    select().
-    from(elections).
-    where(eq(elections.id, electionId));
-
-    if (!election) {return res.status(404).json({ error: "Election not found" });}
-    if (election.status === "cancelled") {
-      return res.status(400).json({ error: "This election has already been cancelled." });
-    }
-    if (election.status !== "draft") {
-      return res.status(400).json({ error: "Only elections that haven't started voting can be cancelled." });
-    }
-
-    if (election.nominationDeadline && new Date(election.nominationDeadline) > new Date()) {
-      return res.status(400).json({ error: "This election can't be cancelled while the candidate allowance period is still active." });
     }
 
     const status = await getNominationStatus(electionId);
     const now = new Date();
 
-    await db.
-    update(candidateRequests).
-    set({ status: "expired", updatedAt: now }).
-    where(
-      and(eq(candidateRequests.electionId, electionId), eq(candidateRequests.status, "pending"))
-    );
+    await db
+      .update(candidateRequests)
+      .set({ status: "expired", updatedAt: now })
+      .where(
+        and(
+          eq(candidateRequests.electionId, electionId),
+          eq(candidateRequests.status, "pending"),
+        ),
+      );
 
-    await db.
-    update(elections).
-    set({
-      status: "cancelled",
-      cancelledAt: now,
-      cancelReason: typeof req.body?.reason === "string" ? req.body.reason : "cancelled_by_admin",
-      nominationAlertSent: true
-    }).
-    where(eq(elections.id, electionId));
+    await db
+      .update(elections)
+      .set({
+        status: "cancelled",
+        cancelledAt: now,
+        cancelReason:
+          typeof req.body?.reason === "string"
+            ? req.body.reason
+            : "cancelled_by_admin",
+        nominationAlertSent: true,
+      })
+      .where(eq(elections.id, electionId));
 
     await recordAudit(actorOf(req), "ELECTION_CANCELLED", {
       electionId,
@@ -613,16 +755,20 @@ const cancelElectionHandler = async (req, res) => {
       accepted: status.acceptedCount,
       rejected: status.rejectedCount,
       noResponse: status.noResponseCount,
-      decisionPhase: election.decisionPhase ?? "initial"
+      decisionPhase: (election as any).decisionPhase ?? "initial",
     });
 
     await notificationService.notifyElectionParticipants(
       electionId,
       election.title,
-      `"${election.title}" has been cancelled by the administrator. No voting will take place.`
+      `"${election.title}" has been cancelled by the administrator. No voting will take place.`,
     );
 
-    res.json({ success: true, message: "Election cancelled", status: "cancelled" });
+    res.json({
+      success: true,
+      message: "Election cancelled",
+      status: "cancelled",
+    });
   } catch (error) {
     console.error("[admin] Error cancelling election:", error);
     res.status(500).json({ error: "Failed to cancel the election" });
@@ -632,77 +778,99 @@ const cancelElectionHandler = async (req, res) => {
 router.post("/:electionId/close-draft", cancelElectionHandler);
 router.post("/:electionId/cancel", cancelElectionHandler);
 
-router.post("/:electionId/set-nomination-deadline", async (req, res) => {
-  try {
-    const { electionId } = req.params;
-    const { deadline } = req.body;
+router.post(
+  "/:electionId/set-nomination-deadline",
+  async (req: Request, res: Response) => {
+    try {
+      const { electionId } = req.params;
+      const { deadline } = req.body;
 
-    if (!deadline) {return res.status(400).json({ error: "deadline is required" });}
+      if (!deadline)
+        return res.status(400).json({ error: "deadline is required" });
 
-    const nominationDeadline = new Date(deadline);
-    if (Number.isNaN(nominationDeadline.getTime())) {
-      return res.status(400).json({ error: "The shared nomination deadline must be a valid date" });
-    }
+      const nominationDeadline = new Date(deadline);
+      if (Number.isNaN(nominationDeadline.getTime())) {
+        return res
+          .status(400)
+          .json({
+            error: "The shared nomination deadline must be a valid date",
+          });
+      }
 
-    const allowanceMinutes = (nominationDeadline.getTime() - Date.now()) / MINUTE_MS;
-    if (
-    allowanceMinutes < MIN_ALLOWANCE_MINUTES ||
-    allowanceMinutes > MAX_ALLOWANCE_MINUTES)
-    {
-      return res.status(400).json({ error: `The initial allowance must be between ${MIN_ALLOWANCE_MINUTES} minutes and 7 days.` });
-    }
+      const allowanceMinutes =
+        (nominationDeadline.getTime() - Date.now()) / MINUTE_MS;
+      if (
+        allowanceMinutes < MIN_ALLOWANCE_MINUTES ||
+        allowanceMinutes > MAX_ALLOWANCE_MINUTES
+      ) {
+        return res.status(400).json({
+          error: `The initial allowance must be between ${MIN_ALLOWANCE_MINUTES} minutes and 7 days.`,
+        });
+      }
 
-    const [election] = await db.
-    select({ id: elections.id, status: elections.status, startTime: elections.startTime }).
-    from(elections).
-    where(eq(elections.id, electionId));
-    if (!election) {return res.status(404).json({ error: "Election not found" });}
-    if (election.status !== "draft") {
-      return res.status(400).json({ error: "Only draft elections can change the nomination deadline" });
-    }
+      const [election] = await db
+        .select({
+          id: elections.id,
+          status: elections.status,
+          startTime: elections.startTime,
+        })
+        .from(elections)
+        .where(eq(elections.id, electionId));
+      if (!election)
+        return res.status(404).json({ error: "Election not found" });
+      if (election.status !== "draft") {
+        return res
+          .status(400)
+          .json({
+            error: "Only draft elections can change the nomination deadline",
+          });
+      }
 
-    const [{ requestCount }] = await db.
-    select({ requestCount: count() }).
-    from(candidateRequests).
-    where(eq(candidateRequests.electionId, electionId));
-    if (Number(requestCount) > 0) {
-      return res.status(400).json({
-        error:
-        "The candidate allowance period has already started — use the extend-allowance action to change it."
+      const [{ requestCount }] = await db
+        .select({ requestCount: count() })
+        .from(candidateRequests)
+        .where(eq(candidateRequests.electionId, electionId));
+      if (Number(requestCount) > 0) {
+        return res.status(400).json({
+          error:
+            "The candidate allowance period has already started — use the extend-allowance action to change it.",
+        });
+      }
+      if (
+        election.startTime &&
+        new Date(election.startTime).getTime() - nominationDeadline.getTime() <
+          MIN_GAP_MINUTES * MINUTE_MS
+      ) {
+        return res.status(400).json({
+          error: `Voting must start at least ${MIN_GAP_MINUTES} minutes after the allowance period ends.`,
+        });
+      }
+
+      await db
+        .update(elections)
+        .set({ nominationDeadline, nominationAlertSent: false })
+        .where(eq(elections.id, electionId));
+
+      await db
+        .update(candidateRequests)
+        .set({ expiresAt: nominationDeadline, updatedAt: new Date() })
+        .where(
+          and(
+            eq(candidateRequests.electionId, electionId),
+            eq(candidateRequests.status, "pending"),
+          ),
+        );
+
+      res.json({
+        success: true,
+        nominationDeadline,
+        earliestVotingStart: earliestVotingStart(nominationDeadline),
       });
+    } catch (error) {
+      console.error("[admin] Error setting nomination deadline:", error);
+      res.status(500).json({ error: "Failed to set nomination deadline" });
     }
-    if (
-    election.startTime &&
-    new Date(election.startTime).getTime() - nominationDeadline.getTime() <
-    MIN_GAP_MINUTES * MINUTE_MS)
-    {
-      return res.status(400).json({ error: `Voting must start at least ${MIN_GAP_MINUTES} minutes after the allowance period ends.` });
-    }
-
-    await db.
-    update(elections).
-    set({ nominationDeadline, nominationAlertSent: false }).
-    where(eq(elections.id, electionId));
-
-    await db.
-    update(candidateRequests).
-    set({ expiresAt: nominationDeadline, updatedAt: new Date() }).
-    where(
-      and(
-        eq(candidateRequests.electionId, electionId),
-        eq(candidateRequests.status, "pending")
-      )
-    );
-
-    res.json({
-      success: true,
-      nominationDeadline,
-      earliestVotingStart: earliestVotingStart(nominationDeadline)
-    });
-  } catch (error) {
-    console.error("[admin] Error setting nomination deadline:", error);
-    res.status(500).json({ error: "Failed to set nomination deadline" });
-  }
-});
+  },
+);
 
 export default router;

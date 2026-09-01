@@ -4,14 +4,21 @@ import { logger } from "../lib/logger";
 import { AppError } from "../lib/errors";
 import { env } from "../config/env";
 
-export function notFoundHandler(req, res) {
+export function notFoundHandler(req: Request, res: Response) {
   res.status(404).json({ error: `Route ${req.method} ${req.path} not found` });
 }
 
-export function errorHandler(err, req, res, _next) {
+export function errorHandler(
+  err: unknown,
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+) {
   if (err instanceof ZodError) {
     logger.warn("Validation error", { path: req.path });
-    return res.status(400).json({ error: "Validation failed", details: err.flatten() });
+    return res
+      .status(400)
+      .json({ error: "Validation failed", details: err.flatten() });
   }
 
   if (err instanceof AppError) {
@@ -24,7 +31,15 @@ export function errorHandler(err, req, res, _next) {
   }
 
   const message = err instanceof Error ? err.message : "Unknown error";
-  logger.error(message, { path: req.path, stack: err instanceof Error ? err.stack : undefined });
+  logger.error(message, {
+    path: req.path,
+    stack: err instanceof Error ? err.stack : undefined,
+  });
 
-  return res.status(500).json({ error: env.NODE_ENV === "production" ? "Something went wrong. Please try again." : message });
+  return res.status(500).json({
+    error:
+      env.NODE_ENV === "production"
+        ? "Something went wrong. Please try again."
+        : message,
+  });
 }

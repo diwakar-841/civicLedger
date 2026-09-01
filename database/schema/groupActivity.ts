@@ -12,14 +12,17 @@ export const groupActivity = pgTable(
     targetName: text("target_name"),
     targetEmail: text("target_email"),
     detail: text("detail"),
-    createdAt: timestamp("created_at", { withTimezone: true }).
-    notNull().
-    defaultNow()
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (table) => ({
     groupIdx: index("group_activity_group_idx").on(
       table.groupId,
-      table.createdAt
-    )
-  })
+      table.createdAt,
+    ),
+  }),
 );
+
+export type GroupActivity = typeof groupActivity.$inferSelect;
+export type NewGroupActivity = typeof groupActivity.$inferInsert;

@@ -1,7 +1,7 @@
-function toDisplayId(prefix, id) {
+function toDisplayId(prefix: string, id: string): string {
   return `${prefix}-${id.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
 }
 
-export const electionDisplayId = (id) => {return toDisplayId("ELC", id);};
-export const voterDisplayId = (id) => {return toDisplayId("VTR", id);};
-export const adminDisplayId = (id) => {return toDisplayId("ADM", id);};
+export const electionDisplayId = (id: string) => toDisplayId("ELC", id);
+export const voterDisplayId = (id: string) => toDisplayId("VTR", id);
+export const adminDisplayId = (id: string) => toDisplayId("ADM", id);

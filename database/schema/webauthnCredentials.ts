@@ -1,11 +1,18 @@
-import { pgTable, uuid, text, integer, timestamp, jsonb } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  uuid,
+  text,
+  integer,
+  timestamp,
+  jsonb,
+} from "drizzle-orm/pg-core";
 import { users } from "./users";
 
 export const webauthnCredentials = pgTable("webauthn_credentials", {
   id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").
-  notNull().
-  references(() => users.id, { onDelete: "cascade" }),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
 
   credentialId: text("credential_id").notNull().unique(),
 
@@ -14,6 +21,8 @@ export const webauthnCredentials = pgTable("webauthn_credentials", {
 
   deviceType: text("device_type").notNull().default("singleDevice"),
 
-  transports: jsonb("transports").$type(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  transports: jsonb("transports").$type<string[]>(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });

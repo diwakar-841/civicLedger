@@ -8,7 +8,7 @@ const RPC_URL = process.env.RPC_URL || "http://127.0.0.1:7545";
 
 async function main() {
   const { abi, bytecode } = JSON.parse(
-    fs.readFileSync(path.join(__dirname, "artifacts", "Voting.json"), "utf8")
+    fs.readFileSync(path.join(__dirname, "artifacts", "Voting.json"), "utf8"),
   );
 
   const provider = new ethers.JsonRpcProvider(RPC_URL);
@@ -24,7 +24,11 @@ async function main() {
 
   await (await voting.registerCandidate("Alice")).wait();
   await (await voting.registerCandidate("Bob")).wait();
-  assert.strictEqual(Number(await voting.candidateCount()), 2, "expected 2 candidates");
+  assert.strictEqual(
+    Number(await voting.candidateCount()),
+    2,
+    "expected 2 candidates",
+  );
   console.log("PASS: candidates registered");
 
   await (await voting.registerVoter(await voter1.getAddress())).wait();

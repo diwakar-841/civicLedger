@@ -42,6 +42,7 @@ election still shares the same global on-chain id space and the same
 "is voting open" switch.
 
 In practice this means:
+
 - On-chain candidate ids must stay globally unique across all elections
   (the backend already enforces this by always registering candidates
   on-chain before inserting the DB row).

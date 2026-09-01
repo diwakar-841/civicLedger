@@ -5,20 +5,23 @@ import { env } from "../config/env";
 
 const ALGORITHM = "aes-256-gcm";
 
-function getDerivedKey() {
+function getDerivedKey(): Buffer {
   return crypto.createHash("sha256").update(env.TOTP_ENCRYPTION_KEY).digest();
 }
 
-export function encryptSecret(plaintext) {
+export function encryptSecret(plaintext: string): string {
   const key = getDerivedKey();
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const encrypted = Buffer.concat([
+    cipher.update(plaintext, "utf8"),
+    cipher.final(),
+  ]);
   const tag = cipher.getAuthTag();
   return `${iv.toString("hex")}:${tag.toString("hex")}:${encrypted.toString("hex")}`;
 }
 
-export function decryptSecret(stored) {
+export function decryptSecret(stored: string): string {
   const key = getDerivedKey();
   const parts = stored.split(":");
   const iv = Buffer.from(parts[0], "hex");
@@ -26,20 +29,33 @@ export function decryptSecret(stored) {
   const ciphertext = Buffer.from(parts[2], "hex");
   const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
   decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+  return Buffer.concat([
+    decipher.update(ciphertext),
+    decipher.final(),
+  ]).toString("utf8");
 }
 
-export function generateTotpSecret() {
+export function generateTotpSecret(): string {
   return generateSecret();
 }
 
-export async function generateTotpQrCode(secret, email) {
+export async function generateTotpQrCode(
+  secret: string,
+  email: string,
+): Promise<string> {
   const totp = new TOTP();
-  const otpauth = totp.toURI({ label: email, issuer: "BlockchainVoting", secret });
+  const otpauth = totp.toURI({
+    label: email,
+    issuer: "BlockchainVoting",
+    secret,
+  });
   return QRCode.toDataURL(otpauth);
 }
 
-export async function verifyTotpCode(secret, code) {
+export async function verifyTotpCode(
+  secret: string,
+  code: string,
+): Promise<boolean> {
   try {
     const result = await verify({ token: code, secret });
     return result.valid;
@@ -48,9 +64,9 @@ export async function verifyTotpCode(secret, code) {
   }
 }
 
-export function generateRecoveryCodes() {
-  const plain = [];
-  const hashes = [];
+export function generateRecoveryCodes(): { plain: string[]; hashes: string[] } {
+  const plain: string[] = [];
+  const hashes: string[] = [];
   for (let i = 0; i < 8; i++) {
     const code = crypto.randomBytes(10).toString("hex").toUpperCase();
     plain.push(code);
@@ -59,10 +75,13 @@ export function generateRecoveryCodes() {
   return { plain, hashes };
 }
 
-export function verifyRecoveryCode(code, storedHashes) {
+export function verifyRecoveryCode(
+  code: string,
+  storedHashes: string[],
+): { valid: boolean; remaining: string[] } {
   const hash = crypto.createHash("sha256").update(code).digest("hex");
   const idx = storedHashes.indexOf(hash);
-  if (idx === -1) {return { valid: false, remaining: storedHashes };}
-  const remaining = storedHashes.filter((_, i) => {return i !== idx;});
+  if (idx === -1) return { valid: false, remaining: storedHashes };
+  const remaining = storedHashes.filter((_, i) => i !== idx);
   return { valid: true, remaining };
 }

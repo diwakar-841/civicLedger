@@ -1,13 +1,52 @@
 import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../lib/apiClient";
-import { formatError } from "../lib/formatError";
 
-const EMPTY = { elections: [], users: [], admins: [], groups: [] };
+export type GlobalSearchType = "all" | "election" | "user" | "admin" | "group";
+export interface GlobalSearchGroup {
+  kind: "group";
+  id: string;
+  displayId: string;
+  name: string;
+}
 
-export function useGlobalSearch(query, type = "all") {
-  const [results, setResults] = useState(EMPTY);
+export interface GlobalSearchElection {
+  kind: "election";
+  id: string;
+  displayId: string;
+  title: string;
+  status: "draft" | "active" | "closed";
+  isHidden: boolean;
+  startTime: string | null;
+  endTime: string | null;
+}
+
+export interface GlobalSearchUser {
+  kind: "user" | "admin";
+  id: string;
+  displayId: string;
+  fullName: string;
+  email: string;
+  isVerified?: boolean;
+}
+
+export interface GlobalSearchResults {
+  elections: GlobalSearchElection[];
+  users: GlobalSearchUser[];
+  admins: GlobalSearchUser[];
+  groups: GlobalSearchGroup[];
+}
+
+const EMPTY: GlobalSearchResults = {
+  elections: [],
+  users: [],
+  admins: [],
+  groups: [],
+};
+
+export function useGlobalSearch(query: string, type: GlobalSearchType = "all") {
+  const [results, setResults] = useState<GlobalSearchResults>(EMPTY);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
 
   useEffect(() => {
@@ -24,26 +63,33 @@ export function useGlobalSearch(query, type = "all") {
     const id = ++requestId.current;
     const timer = setTimeout(async () => {
       try {
-        const { data } = await apiClient.get("/elections/search", { params: { q, type } });
+        const { data } = await apiClient.get<GlobalSearchResults>(
+          "/elections/search",
+          {
+            params: { q, type },
+          },
+        );
         if (id === requestId.current) {
           setResults({
             elections: data.elections ?? [],
             users: data.users ?? [],
             admins: data.admins ?? [],
-            groups: data.groups ?? []
+            groups: data.groups ?? [],
           });
         }
-      } catch (err) {
+      } catch (err: any) {
         if (id === requestId.current) {
-          setError(formatError(err, "Search failed"));
+          setError(
+            err?.response?.data?.message || err?.message || "Search failed",
+          );
           setResults(EMPTY);
         }
       } finally {
-        if (id === requestId.current) {setLoading(false);}
+        if (id === requestId.current) setLoading(false);
       }
     }, 300);
 
-    return () => {return clearTimeout(timer);};
+    return () => clearTimeout(timer);
   }, [query, type]);
 
   return { results, loading, error };

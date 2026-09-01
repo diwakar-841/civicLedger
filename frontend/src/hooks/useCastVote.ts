@@ -3,13 +3,15 @@ import { apiClient } from "../lib/apiClient";
 
 export function useCastVote() {
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState("idle");
+  const [step, setStep] = useState<"idle" | "submitting" | "confirming">(
+    "idle",
+  );
 
   async function castVote(
-  electionId,
-  candidateId,
-  voteToken)
-  {
+    electionId: string,
+    candidateId: string,
+    voteToken: string,
+  ) {
     setLoading(true);
     setStep("submitting");
     try {
@@ -17,7 +19,7 @@ export function useCastVote() {
       const { data } = await apiClient.post("/votes", {
         electionId,
         candidateId,
-        voteToken
+        voteToken,
       });
       return data;
     } finally {

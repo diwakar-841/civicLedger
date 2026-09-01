@@ -4,40 +4,46 @@ import { desc, eq } from "drizzle-orm";
 import { logger } from "./logger";
 
 function computeHash(
-prevHash,
-actor,
-action,
-metadata,
-txHash,
-createdAt)
-{
+  prevHash: string | null,
+  actor: string,
+  action: string,
+  metadata: Record<string, unknown> | null | undefined,
+  txHash: string | null | undefined,
+  createdAt: Date,
+): string {
   const payload =
-  (prevHash ?? "") +
-  actor +
-  action +
-  JSON.stringify(metadata ?? {}) + (
-  txHash ?? "") +
-  createdAt.toISOString();
+    (prevHash ?? "") +
+    actor +
+    action +
+    JSON.stringify(metadata ?? {}) +
+    (txHash ?? "") +
+    createdAt.toISOString();
   return crypto.createHash("sha256").update(payload).digest("hex");
 }
 
 export async function recordAudit(
-actor,
-action,
-  metadata?,
-  txHash?,
-  ipAddress?)
-{
+  actor: string,
+  action: string,
+  metadata?: Record<string, unknown>,
+  txHash?: string,
+  ipAddress?: string,
+) {
   try {
-
     const lastRow = await db.query.auditLog.findFirst({
       orderBy: [desc(auditLog.createdAt)],
-      columns: { hash: true }
+      columns: { hash: true },
     });
     const prevHash = lastRow?.hash ?? null;
 
     const createdAt = new Date();
-    const hash = computeHash(prevHash, actor, action, metadata, txHash, createdAt);
+    const hash = computeHash(
+      prevHash,
+      actor,
+      action,
+      metadata,
+      txHash,
+      createdAt,
+    );
 
     await db.insert(auditLog).values({
       actor,
@@ -47,10 +53,13 @@ action,
       ipAddress: ipAddress ?? null,
       prevHash,
       hash,
-      createdAt
+      createdAt,
     });
   } catch (err) {
-    logger.error("Failed to write audit log entry", { action, error: String(err) });
+    logger.error("Failed to write audit log entry", {
+      action,
+      error: String(err),
+    });
   }
 }
 

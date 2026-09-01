@@ -3,9 +3,8 @@ import { AuthedRequest } from "../middlewares/auth.middleware";
 import {
   verifyIdentity,
   verifyOtp,
-  resendKycOtp as resendOtp 
-} from
-"../services/kyc.service";
+  resendKycOtp as resendOtp,
+} from "../services/kyc.service";
 import {
   getRegistrationOptions,
   completeRegistration,
@@ -15,13 +14,16 @@ import {
   verifyVoteAuth,
   verifyVotePinAuth,
   getCandidateRequestAuthenticationOptions,
-  verifyCandidateRequestAuthentication 
-} from
-"../services/webauthn.service";
+  verifyCandidateRequestAuthentication,
+} from "../services/webauthn.service";
 import { setRefreshCookie } from "../lib/cookies";
 import { candidateRequestService } from "../services/candidateRequest.service";
 
-export async function verifyIdentityHandler(req, res, next) {
+export async function verifyIdentityHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   try {
     const { kycToken, phone, dob } = req.body;
     const result = await verifyIdentity(kycToken, phone, dob);
@@ -31,7 +33,11 @@ export async function verifyIdentityHandler(req, res, next) {
   }
 }
 
-export async function verifyOtpHandler(req, res, next) {
+export async function verifyOtpHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   try {
     const { kycToken, otp } = req.body;
     const result = await verifyOtp(kycToken, otp);
@@ -41,7 +47,11 @@ export async function verifyOtpHandler(req, res, next) {
   }
 }
 
-export async function resendOtpHandler(req, res, next) {
+export async function resendOtpHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   try {
     const { kycToken } = req.body;
     const { devOtp } = await resendOtp(kycToken);
@@ -51,7 +61,11 @@ export async function resendOtpHandler(req, res, next) {
   }
 }
 
-export async function biometricRegisterOptionsHandler(req, res, next) {
+export async function biometricRegisterOptionsHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   try {
     const { setupToken } = req.body;
     const options = await getRegistrationOptions(setupToken);
@@ -61,7 +75,11 @@ export async function biometricRegisterOptionsHandler(req, res, next) {
   }
 }
 
-export async function biometricRegisterVerifyHandler(req, res, next) {
+export async function biometricRegisterVerifyHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   try {
     const { setupToken, credential } = req.body;
     const result = await completeRegistration(setupToken, credential);
@@ -72,7 +90,11 @@ export async function biometricRegisterVerifyHandler(req, res, next) {
   }
 }
 
-export async function biometricLoginChallengeHandler(req, res, next) {
+export async function biometricLoginChallengeHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   try {
     const { loginToken } = req.body;
     const options = await getLoginAuthenticationOptions(loginToken);
@@ -82,7 +104,11 @@ export async function biometricLoginChallengeHandler(req, res, next) {
   }
 }
 
-export async function biometricLoginVerifyHandler(req, res, next) {
+export async function biometricLoginVerifyHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   try {
     const { loginToken, credential } = req.body;
 
@@ -90,7 +116,7 @@ export async function biometricLoginVerifyHandler(req, res, next) {
       loginToken,
       credential,
       req.headers["user-agent"],
-      req.ip
+      req.ip,
     );
     setRefreshCookie(res, result.rawToken);
     res.json({ accessToken: result.accessToken, user: result.user });
@@ -99,29 +125,41 @@ export async function biometricLoginVerifyHandler(req, res, next) {
   }
 }
 
-export async function voteChallengeHandler(req, res, next) {
+export async function voteChallengeHandler(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction,
+) {
   try {
-    const options = await getAuthenticationOptions(req.user.userId);
+    const options = await getAuthenticationOptions(req.user!.userId);
     res.json(options);
   } catch (err) {
     next(err);
   }
 }
 
-export async function voteVerifyHandler(req, res, next) {
+export async function voteVerifyHandler(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction,
+) {
   try {
     const { credential } = req.body;
-    const result = await verifyVoteAuth(req.user.userId, credential);
+    const result = await verifyVoteAuth(req.user!.userId, credential);
     res.json(result);
   } catch (err) {
     next(err);
   }
 }
 
-export async function votePinVerifyHandler(req, res, next) {
+export async function votePinVerifyHandler(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction,
+) {
   try {
     const { pin } = req.body;
-    const result = await verifyVotePinAuth(req.user.userId, pin);
+    const result = await verifyVotePinAuth(req.user!.userId, pin);
     res.json(result);
   } catch (err) {
     next(err);
@@ -129,13 +167,16 @@ export async function votePinVerifyHandler(req, res, next) {
 }
 
 export async function candidateRequestChallengeHandler(
-req,
-res,
-next)
-{
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction,
+) {
   try {
     const { requestId } = req.body;
-    const options = await getCandidateRequestAuthenticationOptions(req.user.userId, requestId);
+    const options = await getCandidateRequestAuthenticationOptions(
+      req.user!.userId,
+      requestId,
+    );
     res.json(options);
   } catch (err) {
     next(err);
@@ -143,16 +184,16 @@ next)
 }
 
 export async function candidateRequestVerifyHandler(
-req,
-res,
-next)
-{
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction,
+) {
   try {
     const { requestId, credential } = req.body;
     const authToken = await verifyCandidateRequestAuthentication(
-      req.user.userId,
+      req.user!.userId,
       requestId,
-      credential
+      credential,
     );
     res.json({ authToken });
   } catch (err) {
@@ -161,16 +202,16 @@ next)
 }
 
 export async function candidateRequestPinHandler(
-req,
-res,
-next)
-{
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction,
+) {
   try {
     const { requestId, pin } = req.body;
     const authToken = await candidateRequestService.createAcceptAuthToken(
-      req.user.userId,
+      req.user!.userId,
       requestId,
-      pin
+      pin,
     );
     res.json({ authToken });
   } catch (err) {

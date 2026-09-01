@@ -1,15 +1,14 @@
 import axios from "axios";
 
-let _accessToken = null;
+let _accessToken: string | null = null;
 
-export function getAccessToken() {
+export function getAccessToken(): string | null {
   return _accessToken;
 }
 
-export function setAccessToken(token) {
+export function setAccessToken(token: string | null) {
   _accessToken = token;
   if (!token) {
-
     window.dispatchEvent(new CustomEvent("auth:session-expired"));
   }
 }
@@ -21,7 +20,7 @@ export const apiClient = axios.create({
   withCredentials: true,
 
   timeout: 30_000,
-  headers: { "Content-Type": "application/json" }
+  headers: { "Content-Type": "application/json" },
 });
 
 apiClient.interceptors.request.use((config) => {
@@ -33,23 +32,23 @@ apiClient.interceptors.request.use((config) => {
 });
 
 let _isRefreshing = false;
-let _refreshQueue = [];
+let _refreshQueue: Array<(token: string | null) => void> = [];
 
-function processRefreshQueue(token) {
-  _refreshQueue.forEach((cb) => {return cb(token);});
+function processRefreshQueue(token: string | null) {
+  _refreshQueue.forEach((cb) => cb(token));
   _refreshQueue = [];
 }
 
 apiClient.interceptors.response.use(
-  (res) => {return res;},
+  (res) => res,
   async (err) => {
     const originalRequest = err.config;
 
     if (
-    err.response?.status !== 401 ||
-    originalRequest._retry ||
-    originalRequest.url?.includes("/auth/refresh"))
-    {
+      err.response?.status !== 401 ||
+      originalRequest._retry ||
+      originalRequest.url?.includes("/auth/refresh")
+    ) {
       return Promise.reject(err);
     }
 
@@ -70,19 +69,20 @@ apiClient.interceptors.response.use(
     _isRefreshing = true;
 
     try {
-      const { data } = await apiClient.post("/auth/refresh");
+      const { data } = await apiClient.post<{ accessToken: string }>(
+        "/auth/refresh",
+      );
       const newToken = data.accessToken;
       setAccessToken(newToken);
       processRefreshQueue(newToken);
       originalRequest.headers.Authorization = `Bearer ${newToken}`;
       return apiClient(originalRequest);
     } catch {
-
       setAccessToken(null);
       processRefreshQueue(null);
       return Promise.reject(err);
     } finally {
       _isRefreshing = false;
     }
-  }
+  },
 );

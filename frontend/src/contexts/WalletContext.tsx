@@ -1,11 +1,13 @@
-import { createContext, useContext, ReactNode } from "react";import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
+import { createContext, useContext, ReactNode } from "react";
 
-const WalletContext = createContext({});
+interface WalletContextValue {}
 
-export function WalletProvider({ children }) {
-  return _jsxDEV(WalletContext.Provider, { value: {}, children: children }, void 0, false);
+const WalletContext = createContext<WalletContextValue>({});
+
+export function WalletProvider({ children }: { children: ReactNode }) {
+  return <WalletContext.Provider value={{}}>{children}</WalletContext.Provider>;
 }
 
-export function useWallet() {
+export function useWallet(): WalletContextValue {
   return useContext(WalletContext);
 }

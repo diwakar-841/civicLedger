@@ -9,12 +9,18 @@ const router = Router();
 
 const verifySchema = z.object({
   address: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "Invalid wallet address"),
-  signature: z.string().min(1)
+  signature: z.string().min(1),
 });
 
 router.post("/generate", requireAuth, walletLimiter, generate);
 
 router.post("/nonce", requireAuth, walletLimiter, nonce);
-router.post("/verify", requireAuth, walletLimiter, validate(verifySchema), verify);
+router.post(
+  "/verify",
+  requireAuth,
+  walletLimiter,
+  validate(verifySchema),
+  verify,
+);
 
 export default router;

@@ -4,16 +4,17 @@ import { AppError } from "../lib/errors";
 import { logger } from "../lib/logger";
 
 const VOTING_ABI = [
-"function registerVoter(address voter) external",
-"function registerCandidate(string name) external returns (uint256)",
-"function setElectionOpen(bool isOpen) external",
-"function castVote(uint256 candidateId) external",
-"function getResults() external view returns (uint256[])",
-"function isEligible(address) external view returns (bool)",
-"function hasVoted(address) external view returns (bool)",
-"function candidateCount() external view returns (uint256)",
-"event VoteCast(address indexed voter, uint256 indexed candidateId)",
-"event CandidateRegistered(uint256 indexed candidateId, string name)"];
+  "function registerVoter(address voter) external",
+  "function registerCandidate(string name) external returns (uint256)",
+  "function setElectionOpen(bool isOpen) external",
+  "function castVote(uint256 candidateId) external",
+  "function getResults() external view returns (uint256[])",
+  "function isEligible(address) external view returns (bool)",
+  "function hasVoted(address) external view returns (bool)",
+  "function candidateCount() external view returns (uint256)",
+  "event VoteCast(address indexed voter, uint256 indexed candidateId)",
+  "event CandidateRegistered(uint256 indexed candidateId, string name)",
+];
 
 const RPC_URL = env.RPC_URL;
 const CONTRACT_ADDRESS = env.VOTING_CONTRACT_ADDRESS;
@@ -34,8 +35,8 @@ function getContract(withSigner = false) {
   return new ethers.Contract(CONTRACT_ADDRESS, VOTING_ABI, provider);
 }
 
-export async function fundDeployerIfNeeded() {
-  if (env.NODE_ENV !== "development") {return;}
+export async function fundDeployerIfNeeded(): Promise<void> {
+  if (env.NODE_ENV !== "development") return;
 
   const provider = getProvider();
   const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
@@ -46,7 +47,9 @@ export async function fundDeployerIfNeeded() {
     const threshold = ethers.parseEther("1");
 
     if (balance >= threshold) {
-      logger.info(`Deployer wallet OK: ${ethers.formatEther(balance)} ETH`, { address });
+      logger.info(`Deployer wallet OK: ${ethers.formatEther(balance)} ETH`, {
+        address,
+      });
       return;
     }
 
@@ -56,31 +59,34 @@ export async function fundDeployerIfNeeded() {
     const after = await provider.getBalance(address);
     logger.info(
       `Deployer wallet funded via evm_setAccountBalance: ${ethers.formatEther(after)} ETH`,
-      { address }
+      { address },
     );
   } catch (err) {
-    logger.warn("Could not auto-fund deployer wallet (not a Ganache dev node?)", {
-      address,
-      error: String(err)
-    });
+    logger.warn(
+      "Could not auto-fund deployer wallet (not a Ganache dev node?)",
+      {
+        address,
+        error: String(err),
+      },
+    );
   }
 
   if (CONTRACT_ADDRESS === ZERO_ADDRESS) {
     logger.warn(
-      "VOTING_CONTRACT_ADDRESS is the zero address — run `node blockchain/compile.js && node blockchain/deploy.js` to deploy the contract, then restart the backend."
+      "VOTING_CONTRACT_ADDRESS is the zero address — run `node blockchain/compile.js && node blockchain/deploy.js` to deploy the contract, then restart the backend.",
     );
   }
 }
 
-export async function ensureVoterEligible(address) {
+export async function ensureVoterEligible(address: string): Promise<void> {
   const contract = getContract(false);
   try {
     const eligible = await contract.isEligible(address);
-    if (eligible) {return;}
+    if (eligible) return;
   } catch (err) {
     logger.warn("Could not check voter eligibility — proceeding to register", {
       address,
-      error: String(err)
+      error: String(err),
     });
   }
 
@@ -90,66 +96,82 @@ export async function ensureVoterEligible(address) {
     await tx.wait();
     logger.info("Voter registered on-chain", { address });
   } catch (err) {
-    logger.error("Failed to register voter on-chain", { address, error: String(err) });
+    logger.error("Failed to register voter on-chain", {
+      address,
+      error: String(err),
+    });
     throw new AppError("Could not register voter on the blockchain", 500);
   }
 }
 
-export async function checkHasVoted(walletAddress) {
+export async function checkHasVoted(
+  walletAddress: string,
+): Promise<{ hasVoted: boolean }> {
   const contract = getContract(false);
   try {
-    const voted = await contract.hasVoted(walletAddress);
+    const voted: boolean = await contract.hasVoted(walletAddress);
     return { hasVoted: voted };
   } catch (err) {
     logger.warn("Could not check hasVoted on-chain — assuming not voted", {
       address: walletAddress,
-      error: String(err)
+      error: String(err),
     });
     return { hasVoted: false };
   }
 }
 
-export async function getCandidateCountOnChain() {
+export async function getCandidateCountOnChain(): Promise<number> {
   const contract = getContract(false);
-  const count = await contract.candidateCount();
+  const count: bigint = await contract.candidateCount();
   return Number(count);
 }
 
 export async function castVoteAsUser(
-userPrivateKey,
-onChainCandidateId)
-{
+  userPrivateKey: string,
+  onChainCandidateId: number,
+): Promise<{ txHash: string; blockNumber: number }> {
   const provider = getProvider();
   const userWallet = new ethers.Wallet(userPrivateKey, provider);
-  const contract = new ethers.Contract(CONTRACT_ADDRESS, VOTING_ABI, userWallet);
+  const contract = new ethers.Contract(
+    CONTRACT_ADDRESS,
+    VOTING_ABI,
+    userWallet,
+  );
 
   if (env.NODE_ENV === "development") {
     try {
       const balance = await provider.getBalance(userWallet.address);
       if (balance < ethers.parseEther("0.01")) {
         const target = "0x" + (10n * 10n ** 18n).toString(16);
-        await provider.send("evm_setAccountBalance", [userWallet.address, target]);
-        logger.info("Auto-funded user wallet for dev", { address: userWallet.address });
+        await provider.send("evm_setAccountBalance", [
+          userWallet.address,
+          target,
+        ]);
+        logger.info("Auto-funded user wallet for dev", {
+          address: userWallet.address,
+        });
       }
-    } catch {
-
-    }
+    } catch {}
   }
 
   try {
-    const tx = await contract.castVote(onChainCandidateId);
+    const tx = await (contract as any).castVote(onChainCandidateId);
     const receipt = await tx.wait();
     logger.info("Vote cast on-chain", {
       voter: userWallet.address,
       candidateId: onChainCandidateId,
-      txHash: receipt.hash
+      txHash: receipt.hash,
     });
     return { txHash: receipt.hash, blockNumber: receipt.blockNumber };
-  } catch (err) {
-
-    const ganacheReason =
-    err?.info?.error?.data?.reason ?? err?.info?.error?.message;
-    const msg = ganacheReason ?? err?.reason ?? err?.shortMessage ?? err?.message ?? String(err);
+  } catch (err: any) {
+    const ganacheReason: string | undefined =
+      err?.info?.error?.data?.reason ?? err?.info?.error?.message;
+    const msg: string =
+      ganacheReason ??
+      err?.reason ??
+      err?.shortMessage ??
+      err?.message ??
+      String(err);
 
     logger.error("castVote transaction failed", {
       voter: userWallet.address,
@@ -158,7 +180,7 @@ onChainCandidateId)
       reason: err?.reason ?? null,
       shortMessage: err?.shortMessage ?? null,
       ganacheReason: ganacheReason ?? null,
-      message: err?.message ?? null
+      message: err?.message ?? null,
     });
 
     if (msg.includes("already voted") || msg.includes("hasVoted")) {
@@ -170,30 +192,36 @@ onChainCandidateId)
     if (msg.includes("election is not open") || msg.includes("electionOpen")) {
       throw new AppError(
         "Voting has just opened for this election but hasn't fully activated on-chain yet — please wait a few seconds and try again.",
-        409
+        409,
       );
     }
     if (msg.includes("invalid candidate")) {
       throw new AppError("That candidate is not registered on-chain", 400);
     }
     if (msg.includes("paused")) {
-      throw new AppError("Voting is temporarily paused — please try again shortly", 503);
+      throw new AppError(
+        "Voting is temporarily paused — please try again shortly",
+        503,
+      );
     }
-    if (err?.code === "INSUFFICIENT_FUNDS" || msg.toLowerCase().includes("insufficient funds")) {
+    if (
+      err?.code === "INSUFFICIENT_FUNDS" ||
+      msg.toLowerCase().includes("insufficient funds")
+    ) {
       throw new AppError(
         "Your voting wallet has no gas funds. In development this should auto-fund — " +
-        "check that your local chain supports the funding RPC method used (Ganache's " +
-        "evm_setAccountBalance); on other dev nodes (e.g. Anvil/Hardhat) you may need to " +
-        "fund the wallet manually.",
-        500
+          "check that your local chain supports the funding RPC method used (Ganache's " +
+          "evm_setAccountBalance); on other dev nodes (e.g. Anvil/Hardhat) you may need to " +
+          "fund the wallet manually.",
+        500,
       );
     }
     if (err?.code === "CALL_EXCEPTION" && !ganacheReason && !err?.reason) {
       throw new AppError(
         "The blockchain node didn't return a reason for this failure (missing revert data). " +
-        "Check the backend logs for the full error, and confirm RPC_URL in backend/.env points at " +
-        "a running, correctly-configured chain with the deployed contract.",
-        500
+          "Check the backend logs for the full error, and confirm RPC_URL in backend/.env points at " +
+          "a running, correctly-configured chain with the deployed contract.",
+        500,
       );
     }
     throw new AppError("Failed to submit vote to the blockchain", 500);
@@ -201,15 +229,18 @@ onChainCandidateId)
 }
 
 export async function verifyVoteTransaction(
-txHash,
-expectedVoter,
-expectedOnChainCandidateId)
-{
+  txHash: string,
+  expectedVoter: string,
+  expectedOnChainCandidateId: number,
+): Promise<{ blockNumber: number }> {
   const provider = getProvider();
   const receipt = await provider.getTransactionReceipt(txHash);
 
   if (!receipt) {
-    throw new AppError("Transaction not found. It may still be pending - try again shortly.", 404);
+    throw new AppError(
+      "Transaction not found. It may still be pending - try again shortly.",
+      404,
+    );
   }
   if (receipt.status !== 1) {
     throw new AppError("Transaction failed on-chain", 400);
@@ -222,11 +253,14 @@ expectedOnChainCandidateId)
   for (const log of receipt.logs) {
     try {
       const parsed = iface.parseLog(log);
-      if (parsed?.name !== "VoteCast") {continue;}
+      if (parsed?.name !== "VoteCast") continue;
 
       const voter = String(parsed.args.voter).toLowerCase();
       const candidateId = Number(parsed.args.candidateId);
-      if (voter === expectedVoter.toLowerCase() && candidateId === expectedOnChainCandidateId) {
+      if (
+        voter === expectedVoter.toLowerCase() &&
+        candidateId === expectedOnChainCandidateId
+      ) {
         return { blockNumber: receipt.blockNumber };
       }
     } catch {
@@ -234,24 +268,36 @@ expectedOnChainCandidateId)
     }
   }
 
-  throw new AppError("This transaction does not match a vote from your wallet for this candidate", 400);
+  throw new AppError(
+    "This transaction does not match a vote from your wallet for this candidate",
+    400,
+  );
 }
 
 export function getPublicContractInfo() {
   return { contractAddress: CONTRACT_ADDRESS, rpcUrl: RPC_URL };
 }
 
-export function listenForVoteEvents(onVote) {
+export function listenForVoteEvents(
+  onVote: (voter: string, candidateId: number, txHash: string) => void,
+) {
   const contract = getContract(false);
-  contract.on("VoteCast", (voter, candidateId, event) => {
-    onVote(voter, Number(candidateId), event.log.transactionHash);
-  });
+  contract.on(
+    "VoteCast",
+    (
+      voter: string,
+      candidateId: bigint,
+      event: { log: { transactionHash: string } },
+    ) => {
+      onVote(voter, Number(candidateId), event.log.transactionHash);
+    },
+  );
 }
 
-export async function registerCandidateOnChain(name) {
+export async function registerCandidateOnChain(name: string): Promise<number> {
   const contract = getContract(true);
   try {
-    const tx = await contract.registerCandidate(name);
+    const tx = await (contract as any).registerCandidate(name);
     const receipt = await tx.wait();
 
     if (receipt.logs.length === 0) {
@@ -259,9 +305,9 @@ export async function registerCandidateOnChain(name) {
       if (code === "0x") {
         throw new AppError(
           `No contract deployed at VOTING_CONTRACT_ADDRESS (${CONTRACT_ADDRESS}) on this network. ` +
-          `The transaction "succeeded" as a no-op because there's no code at that address. ` +
-          `Redeploy the contracts and update VOTING_CONTRACT_ADDRESS in backend/.env, then restart the backend.`,
-          500
+            `The transaction "succeeded" as a no-op because there's no code at that address. ` +
+            `Redeploy the contracts and update VOTING_CONTRACT_ADDRESS in backend/.env, then restart the backend.`,
+          500,
         );
       }
     }
@@ -278,20 +324,23 @@ export async function registerCandidateOnChain(name) {
       }
     }
     throw new AppError("CandidateRegistered event not found in receipt", 500);
-  } catch (err) {
-    if (err instanceof AppError) {throw err;}
-    throw new AppError(`Failed to register candidate on-chain: ${err?.message ?? err}`, 500);
+  } catch (err: any) {
+    if (err instanceof AppError) throw err;
+    throw new AppError(
+      `Failed to register candidate on-chain: ${err?.message ?? err}`,
+      500,
+    );
   }
 }
 
-export async function setElectionOpen(isOpen) {
+export async function setElectionOpen(isOpen: boolean): Promise<void> {
   const contract = getContract(true);
-  const tx = await contract.setElectionOpen(isOpen);
+  const tx = await (contract as any).setElectionOpen(isOpen);
   await tx.wait();
 }
 
-export async function getOnChainResults() {
+export async function getOnChainResults(): Promise<number[]> {
   const contract = getContract(false);
-  const results = await contract.getResults();
+  const results: bigint[] = await contract.getResults();
   return results.map(Number);
 }

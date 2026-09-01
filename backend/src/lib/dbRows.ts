@@ -1,9 +1,9 @@
-export function rowsOf<T = Record<string, unknown>>(result: unknown): T[] {
+export function rowsOf(result) {
   if (Array.isArray(result)) {
-    return result as T[];
+    return result;
   }
-  if (result && typeof result === "object" && Array.isArray((result as { rows?: unknown }).rows)) {
-    return (result as { rows: T[] }).rows;
+  if (result && typeof result === "object" && Array.isArray(result.rows)) {
+    return result.rows;
   }
   return [];
 }

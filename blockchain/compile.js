@@ -20,16 +20,18 @@ function compileEntryFile(fileName) {
   const input = {
     language: "Solidity",
     sources: {
-      [fileName]: { content: source }
+      [fileName]: { content: source },
     },
     settings: {
       outputSelection: {
-        "*": { "*": ["abi", "evm.bytecode.object"] }
-      }
-    }
+        "*": { "*": ["abi", "evm.bytecode.object"] },
+      },
+    },
   };
 
-  const output = JSON.parse(solc.compile(JSON.stringify(input), { import: findImports }));
+  const output = JSON.parse(
+    solc.compile(JSON.stringify(input), { import: findImports }),
+  );
 
   if (output.errors) {
     const fatal = output.errors.filter((e) => e.severity === "error");
@@ -41,7 +43,8 @@ function compileEntryFile(fileName) {
 }
 
 function main() {
-  if (!fs.existsSync(ARTIFACTS_DIR)) fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
+  if (!fs.existsSync(ARTIFACTS_DIR))
+    fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
 
   const compiled = compileEntryFile("Voting.sol");
 
@@ -49,13 +52,18 @@ function main() {
     const artifact = {
       contractName,
       abi: contractData.abi,
-      bytecode: "0x" + contractData.evm.bytecode.object
+      bytecode: "0x" + contractData.evm.bytecode.object,
     };
     fs.writeFileSync(
       path.join(ARTIFACTS_DIR, `${contractName}.json`),
-      JSON.stringify(artifact, null, 2)
+      JSON.stringify(artifact, null, 2),
     );
-    console.log("Compiled:", contractName, "->", `artifacts/${contractName}.json`);
+    console.log(
+      "Compiled:",
+      contractName,
+      "->",
+      `artifacts/${contractName}.json`,
+    );
   }
 }
 

@@ -1,10 +1,24 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../lib/apiClient";
 
-export function useVoteStatus(electionId) {
-  const [status, setStatus] = useState(null);
+export interface VoteStatusVote {
+  candidateId: string;
+  candidateName: string;
+  candidateParty: string | null;
+  txHash: string;
+  blockNumber: number;
+  votedAt: string;
+}
+
+export interface VoteStatus {
+  hasVoted: boolean;
+  vote?: VoteStatusVote;
+}
+
+export function useVoteStatus(electionId: string | undefined) {
+  const [status, setStatus] = useState<VoteStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
     if (!electionId) {
@@ -15,17 +29,17 @@ export function useVoteStatus(electionId) {
     setLoading(true);
     setError(null);
 
-    apiClient.
-    get(`/votes/my-vote/${electionId}`).
-    then(({ data }) => {
-      if (!cancelled) {setStatus(data);}
-    }).
-    catch((err) => {
-      if (!cancelled) {setError(err);}
-    }).
-    finally(() => {
-      if (!cancelled) {setLoading(false);}
-    });
+    apiClient
+      .get(`/votes/my-vote/${electionId}`)
+      .then(({ data }) => {
+        if (!cancelled) setStatus(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
     return () => {
       cancelled = true;

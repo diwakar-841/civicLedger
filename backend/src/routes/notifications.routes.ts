@@ -4,10 +4,11 @@ import { requireAuth } from "../middlewares/auth.middleware";
 
 const router = Router();
 
-router.get("/", requireAuth, async (req, res) => {
+router.get("/", requireAuth, async (req: Request, res: Response) => {
   try {
-    const userId = req.user.userId;
-    const notifications = await notificationService.getUserNotifications(userId);
+    const userId = (req as any).user.userId;
+    const notifications =
+      await notificationService.getUserNotifications(userId);
     res.json(notifications);
   } catch (error) {
     console.error("[v0] Error fetching notifications:", error);
@@ -15,10 +16,11 @@ router.get("/", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/unread", requireAuth, async (req, res) => {
+router.get("/unread", requireAuth, async (req: Request, res: Response) => {
   try {
-    const userId = req.user.userId;
-    const notifications = await notificationService.getUnreadNotifications(userId);
+    const userId = (req as any).user.userId;
+    const notifications =
+      await notificationService.getUnreadNotifications(userId);
     res.json(notifications);
   } catch (error) {
     console.error("[v0] Error fetching unread notifications:", error);
@@ -26,20 +28,27 @@ router.get("/unread", requireAuth, async (req, res) => {
   }
 });
 
-router.patch("/:notificationId/read", requireAuth, async (req, res) => {
-  try {
-    const { notificationId } = req.params;
-    await notificationService.markAsRead(notificationId, req.user.userId);
-    res.json({ success: true });
-  } catch (error) {
-    console.error("[v0] Error marking as read:", error);
-    res.status(500).json({ error: "Failed to update notification" });
-  }
-});
+router.patch(
+  "/:notificationId/read",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const { notificationId } = req.params;
+      await notificationService.markAsRead(
+        notificationId,
+        (req as any).user.userId,
+      );
+      res.json({ success: true });
+    } catch (error) {
+      console.error("[v0] Error marking as read:", error);
+      res.status(500).json({ error: "Failed to update notification" });
+    }
+  },
+);
 
-router.patch("/read-all", requireAuth, async (req, res) => {
+router.patch("/read-all", requireAuth, async (req: Request, res: Response) => {
   try {
-    const userId = req.user.userId;
+    const userId = (req as any).user.userId;
     await notificationService.markAllAsRead(userId);
     res.json({ success: true });
   } catch (error) {
@@ -48,20 +57,27 @@ router.patch("/read-all", requireAuth, async (req, res) => {
   }
 });
 
-router.delete("/:notificationId", requireAuth, async (req, res) => {
-  try {
-    const { notificationId } = req.params;
-    await notificationService.deleteNotification(notificationId, req.user.userId);
-    res.json({ success: true });
-  } catch (error) {
-    console.error("[v0] Error deleting notification:", error);
-    res.status(500).json({ error: "Failed to delete notification" });
-  }
-});
+router.delete(
+  "/:notificationId",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const { notificationId } = req.params;
+      await notificationService.deleteNotification(
+        notificationId,
+        (req as any).user.userId,
+      );
+      res.json({ success: true });
+    } catch (error) {
+      console.error("[v0] Error deleting notification:", error);
+      res.status(500).json({ error: "Failed to delete notification" });
+    }
+  },
+);
 
-router.get("/settings", requireAuth, async (req, res) => {
+router.get("/settings", requireAuth, async (req: Request, res: Response) => {
   try {
-    const userId = req.user.userId;
+    const userId = (req as any).user.userId;
     const settings = await notificationService.getOrCreateSettings(userId);
     res.json(settings);
   } catch (error) {
@@ -70,14 +86,14 @@ router.get("/settings", requireAuth, async (req, res) => {
   }
 });
 
-router.patch("/settings", requireAuth, async (req, res) => {
+router.patch("/settings", requireAuth, async (req: Request, res: Response) => {
   try {
-    const userId = req.user.userId;
+    const userId = (req as any).user.userId;
     const { candidateNominationEmails, reminderEmails } = req.body;
 
     await notificationService.updateSettings(userId, {
       candidateNominationEmails,
-      reminderEmails
+      reminderEmails,
     });
 
     res.json({ success: true });

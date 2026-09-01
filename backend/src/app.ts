@@ -35,16 +35,16 @@ app.use(
         fontSrc: ["'self'"],
         objectSrc: ["'none'"],
         mediaSrc: ["'self'"],
-        frameSrc: ["'none'"]
-      }
-    }
-  })
+        frameSrc: ["'none'"],
+      },
+    },
+  }),
 );
 app.use(
   cors({
     origin: allowedOrigins,
-    credentials: true
-  })
+    credentials: true,
+  }),
 );
 app.use(cookieParser());
 app.use(hpp());
@@ -58,7 +58,7 @@ app.use((req, res, next) => {
       method: req.method,
       path: req.path,
       status: res.statusCode,
-      ms: Date.now() - start
+      ms: Date.now() - start,
     });
   });
   next();
@@ -66,7 +66,7 @@ app.use((req, res, next) => {
 
 app.use(apiLimiter);
 
-app.get("/health", (_req, res) => {return res.json({ status: "ok" });});
+app.get("/health", (_req, res) => res.json({ status: "ok" }));
 app.use("/api", routes);
 
 app.use(notFoundHandler);

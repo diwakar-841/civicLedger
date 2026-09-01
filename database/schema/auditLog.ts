@@ -10,5 +10,7 @@ export const auditLog = pgTable("audit_log", {
 
   prevHash: text("prev_hash"),
   hash: text("hash"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });

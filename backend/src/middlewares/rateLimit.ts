@@ -7,13 +7,13 @@ export const authLimiter = rateLimit({
   limit: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many attempts. Please try again in a few minutes." }
+  message: { error: "Too many attempts. Please try again in a few minutes." },
 });
 
 export const authSlowDown: RequestHandler = slowDown({
   windowMs: 15 * 60 * 1000,
   delayAfter: 3,
-  delayMs: (hits) => {return hits * 500;}
+  delayMs: (hits) => hits * 500,
 });
 
 export const voteLimiter = rateLimit({
@@ -21,14 +21,14 @@ export const voteLimiter = rateLimit({
   limit: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many voting attempts. Please slow down." }
+  message: { error: "Too many voting attempts. Please slow down." },
 });
 
 export const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 120,
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
 });
 
 export const walletLimiter = rateLimit({
@@ -36,7 +36,7 @@ export const walletLimiter = rateLimit({
   limit: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many wallet requests. Please try again later." }
+  message: { error: "Too many wallet requests. Please try again later." },
 });
 
 export const resendVerifyLimiter = rateLimit({
@@ -44,7 +44,7 @@ export const resendVerifyLimiter = rateLimit({
   limit: 3,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many verification requests. Please try again later." }
+  message: { error: "Too many verification requests. Please try again later." },
 });
 
 export const kycLimiter = rateLimit({
@@ -52,7 +52,7 @@ export const kycLimiter = rateLimit({
   limit: 8,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many verification attempts. Please try again later." }
+  message: { error: "Too many verification attempts. Please try again later." },
 });
 
 export const voteAuthLimiter = rateLimit({
@@ -60,5 +60,7 @@ export const voteAuthLimiter = rateLimit({
   limit: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many vote auth attempts. Please try again in a few minutes." }
+  message: {
+    error: "Too many vote auth attempts. Please try again in a few minutes.",
+  },
 });

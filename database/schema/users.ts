@@ -1,4 +1,14 @@
-import { pgTable, uuid, text, boolean, timestamp, pgEnum, integer, jsonb, date } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  uuid,
+  text,
+  boolean,
+  timestamp,
+  pgEnum,
+  integer,
+  jsonb,
+  date,
+} from "drizzle-orm/pg-core";
 
 export const roleEnum = pgEnum("role", ["voter", "admin"]);
 
@@ -15,7 +25,9 @@ export const users = pgTable("users", {
   emailVerified: boolean("email_verified").notNull().default(false),
   phoneVerified: boolean("phone_verified").notNull().default(false),
   passwordSetAt: timestamp("password_set_at", { withTimezone: true }),
-  registrationExpiresAt: timestamp("registration_expires_at", { withTimezone: true }),
+  registrationExpiresAt: timestamp("registration_expires_at", {
+    withTimezone: true,
+  }),
   walletAddress: text("wallet_address").unique(),
   walletNonce: text("wallet_nonce"),
   encryptedPrivateKey: text("encrypted_private_key"),
@@ -36,25 +48,43 @@ export const users = pgTable("users", {
 
   isTwoFactorEnabled: boolean("is_two_factor_enabled").notNull().default(false),
   twoFactorSecretEncrypted: text("two_factor_secret_encrypted"),
-  twoFactorRecoveryCodesHash: jsonb("two_factor_recovery_codes_hash").$type(),
+  twoFactorRecoveryCodesHash: jsonb("two_factor_recovery_codes_hash").$type<
+    string[]
+  >(),
 
-  emailVerificationMethod: text("email_verification_method").notNull().default("otp"),
+  emailVerificationMethod: text("email_verification_method")
+    .notNull()
+    .default("otp"),
   emailVerificationTokenHash: text("email_verification_token_hash"),
-  emailVerificationExpiresAt: timestamp("email_verification_expires_at", { withTimezone: true }),
+  emailVerificationExpiresAt: timestamp("email_verification_expires_at", {
+    withTimezone: true,
+  }),
   emailVerificationOtpHash: text("email_verification_otp_hash"),
-  emailVerificationOtpExpiresAt: timestamp("email_verification_otp_expires_at", { withTimezone: true }),
+  emailVerificationOtpExpiresAt: timestamp(
+    "email_verification_otp_expires_at",
+    { withTimezone: true },
+  ),
 
   passwordResetTokenHash: text("password_reset_token_hash"),
-  passwordResetExpiresAt: timestamp("password_reset_expires_at", { withTimezone: true }),
+  passwordResetExpiresAt: timestamp("password_reset_expires_at", {
+    withTimezone: true,
+  }),
 
   phoneVerificationOtpHash: text("phone_verification_otp_hash"),
-  phoneVerificationOtpExpiresAt: timestamp("phone_verification_otp_expires_at", { withTimezone: true }),
+  phoneVerificationOtpExpiresAt: timestamp(
+    "phone_verification_otp_expires_at",
+    { withTimezone: true },
+  ),
 
   pinHash: text("pin_hash"),
   votingPinHash: text("voting_pin_hash"),
   loginPinHash: text("login_pin_hash"),
-  isBiometricRegistered: boolean("is_biometric_registered").notNull().default(false),
+  isBiometricRegistered: boolean("is_biometric_registered")
+    .notNull()
+    .default(false),
   webauthnChallenge: text("webauthn_challenge"),
 
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });

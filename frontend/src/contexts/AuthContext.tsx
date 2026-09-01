@@ -1,11 +1,30 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { apiClient, setAccessToken, getAccessToken } from "../lib/apiClient";import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
+import { apiClient, setAccessToken, getAccessToken } from "../lib/apiClient";
+import type { User } from "../types/api";
 
-const AuthContext = createContext(undefined);
+interface AuthContextValue {
+  user: User | null;
+  token: string | null;
+  isAuthenticated: boolean;
+  isAdmin: boolean;
+  isLoading: boolean;
+  login: (user: User, token: string) => void;
+  logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
+  setWalletAddress: (address: string) => void;
+}
 
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(() => {return getAccessToken();});
+const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(() => getAccessToken());
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -14,25 +33,26 @@ export function AuthProvider({ children }) {
       setUser(null);
     }
     window.addEventListener("auth:session-expired", handleSessionExpired);
-    return () => {return window.removeEventListener("auth:session-expired", handleSessionExpired);};
+    return () =>
+      window.removeEventListener("auth:session-expired", handleSessionExpired);
   }, []);
 
   useEffect(() => {
-    apiClient.
-    get("/auth/me").
-    then(({ data }) => {
-      setToken(getAccessToken());
-      setUser(data);
-    }).
-    catch(() => {
-      setAccessToken(null);
-      setToken(null);
-      setUser(null);
-    }).
-    finally(() => {return setIsLoading(false);});
+    apiClient
+      .get<User>("/auth/me")
+      .then(({ data }) => {
+        setToken(getAccessToken());
+        setUser(data);
+      })
+      .catch(() => {
+        setAccessToken(null);
+        setToken(null);
+        setUser(null);
+      })
+      .finally(() => setIsLoading(false));
   }, []);
 
-  function login(nextUser, nextToken) {
+  function login(nextUser: User, nextToken: string) {
     setAccessToken(nextToken);
     setToken(nextToken);
     setUser(nextUser);
@@ -41,9 +61,7 @@ export function AuthProvider({ children }) {
   async function logout() {
     try {
       await apiClient.post("/auth/logout");
-    } catch {
-
-    }
+    } catch {}
 
     sessionStorage.clear();
     setAccessToken(null);
@@ -53,20 +71,18 @@ export function AuthProvider({ children }) {
 
   async function refreshUser() {
     try {
-      const { data } = await apiClient.get("/auth/me");
+      const { data } = await apiClient.get<User>("/auth/me");
       setUser(data);
-    } catch {
-
-    }
+    } catch {}
   }
 
-  function setWalletAddress(address) {
-    setUser((prev) => {return prev ? { ...prev, walletAddress: address } : prev;});
+  function setWalletAddress(address: string) {
+    setUser((prev) => (prev ? { ...prev, walletAddress: address } : prev));
   }
 
   return (
-    _jsxDEV(AuthContext.Provider, {
-      value: {
+    <AuthContext.Provider
+      value={{
         user,
         token,
         isAuthenticated: Boolean(user && token),
@@ -75,17 +91,18 @@ export function AuthProvider({ children }) {
         login,
         logout,
         refreshUser,
-        setWalletAddress
-      }, children:
-
-      children 
-}, void 0, false
-    ));
-
+        setWalletAddress,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuthContext() {
   const ctx = useContext(AuthContext);
-  if (!ctx) {throw new Error("useAuthContext must be used within AuthProvider");}
+  if (!ctx) throw new Error("useAuthContext must be used within AuthProvider");
   return ctx;
 }
+
+export type { User };

@@ -17,16 +17,18 @@ async function fundAddressIfNeeded(provider, address) {
   try {
     await provider.send("evm_setAccountBalance", [address, target]);
     const after = await provider.getBalance(address);
-    console.log(`Funded deployer: ${ethers.formatEther(after)} ETH (via evm_setAccountBalance)`);
+    console.log(
+      `Funded deployer: ${ethers.formatEther(after)} ETH (via evm_setAccountBalance)`,
+    );
   } catch {
-
-    console.warn("Could not auto-fund deployer (not a Ganache dev node?). Make sure the wallet has ETH.");
+    console.warn(
+      "Could not auto-fund deployer (not a Ganache dev node?). Make sure the wallet has ETH.",
+    );
   }
 }
 
 function patchEnvFile(filePath, key, value) {
   if (!fs.existsSync(filePath)) {
-
     fs.writeFileSync(filePath, `${key}=${value}\n`);
     return;
   }
@@ -79,7 +81,7 @@ async function main() {
 
   fs.writeFileSync(
     path.join(__dirname, "deployed.json"),
-    JSON.stringify({ address, abi }, null, 2)
+    JSON.stringify({ address, abi }, null, 2),
   );
   console.log("Saved address + ABI to deployed.json");
 
@@ -87,7 +89,9 @@ async function main() {
     patchEnvFile(BACKEND_ENV, "VOTING_CONTRACT_ADDRESS", address);
     console.log(`Updated ${BACKEND_ENV} → VOTING_CONTRACT_ADDRESS=${address}`);
   } else {
-    console.log(`backend/.env not found — set VOTING_CONTRACT_ADDRESS=${address} manually`);
+    console.log(
+      `backend/.env not found — set VOTING_CONTRACT_ADDRESS=${address} manually`,
+    );
   }
 }
 
