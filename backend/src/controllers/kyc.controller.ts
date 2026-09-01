@@ -3,8 +3,9 @@ import { AuthedRequest } from "../middlewares/auth.middleware";
 import {
   verifyIdentity,
   verifyOtp,
-  resendKycOtp as resendOtp,
-} from "../services/kyc.service";
+  resendKycOtp as resendOtp 
+} from
+"../services/kyc.service";
 import {
   getRegistrationOptions,
   completeRegistration,
@@ -14,14 +15,13 @@ import {
   verifyVoteAuth,
   verifyVotePinAuth,
   getCandidateRequestAuthenticationOptions,
-  verifyCandidateRequestAuthentication,
-} from "../services/webauthn.service";
+  verifyCandidateRequestAuthentication 
+} from
+"../services/webauthn.service";
 import { setRefreshCookie } from "../lib/cookies";
 import { candidateRequestService } from "../services/candidateRequest.service";
 
-// ─── KYC ─────────────────────────────────────────────────────────────────────
-
-export async function verifyIdentityHandler(req: Request, res: Response, next: NextFunction) {
+export async function verifyIdentityHandler(req, res, next) {
   try {
     const { kycToken, phone, dob } = req.body;
     const result = await verifyIdentity(kycToken, phone, dob);
@@ -31,7 +31,7 @@ export async function verifyIdentityHandler(req: Request, res: Response, next: N
   }
 }
 
-export async function verifyOtpHandler(req: Request, res: Response, next: NextFunction) {
+export async function verifyOtpHandler(req, res, next) {
   try {
     const { kycToken, otp } = req.body;
     const result = await verifyOtp(kycToken, otp);
@@ -41,7 +41,7 @@ export async function verifyOtpHandler(req: Request, res: Response, next: NextFu
   }
 }
 
-export async function resendOtpHandler(req: Request, res: Response, next: NextFunction) {
+export async function resendOtpHandler(req, res, next) {
   try {
     const { kycToken } = req.body;
     const { devOtp } = await resendOtp(kycToken);
@@ -51,9 +51,7 @@ export async function resendOtpHandler(req: Request, res: Response, next: NextFu
   }
 }
 
-// ─── Biometric registration ───────────────────────────────────────────────────
-
-export async function biometricRegisterOptionsHandler(req: Request, res: Response, next: NextFunction) {
+export async function biometricRegisterOptionsHandler(req, res, next) {
   try {
     const { setupToken } = req.body;
     const options = await getRegistrationOptions(setupToken);
@@ -63,14 +61,7 @@ export async function biometricRegisterOptionsHandler(req: Request, res: Respons
   }
 }
 
-/**
- * POST /auth/biometric/register-verify
- *
- * FIX: now sets the httpOnly refreshToken cookie so token refresh works after
- * biometric registration. Previously completeRegistration discarded the
- * rawToken from createSession.
- */
-export async function biometricRegisterVerifyHandler(req: Request, res: Response, next: NextFunction) {
+export async function biometricRegisterVerifyHandler(req, res, next) {
   try {
     const { setupToken, credential } = req.body;
     const result = await completeRegistration(setupToken, credential);
@@ -81,9 +72,7 @@ export async function biometricRegisterVerifyHandler(req: Request, res: Response
   }
 }
 
-// ─── Biometric login ──────────────────────────────────────────────────────────
-
-export async function biometricLoginChallengeHandler(req: Request, res: Response, next: NextFunction) {
+export async function biometricLoginChallengeHandler(req, res, next) {
   try {
     const { loginToken } = req.body;
     const options = await getLoginAuthenticationOptions(loginToken);
@@ -93,19 +82,10 @@ export async function biometricLoginChallengeHandler(req: Request, res: Response
   }
 }
 
-/**
- * POST /auth/biometric/login-verify
- *
- * FIX: removed PIN requirement (already in place). Also now sets the httpOnly
- * refreshToken cookie so token refresh works. Previously verifyLoginBiometric
- * discarded the rawToken from createSession, making silent token refresh
- * impossible and causing "Missing authorization token" errors once the
- * 15-minute access token expired.
- */
-export async function biometricLoginVerifyHandler(req: Request, res: Response, next: NextFunction) {
+export async function biometricLoginVerifyHandler(req, res, next) {
   try {
     const { loginToken, credential } = req.body;
-    // `pin` from old clients is silently ignored
+
     const result = await verifyLoginBiometric(
       loginToken,
       credential,
@@ -119,43 +99,29 @@ export async function biometricLoginVerifyHandler(req: Request, res: Response, n
   }
 }
 
-// ─── Vote authentication — biometric ─────────────────────────────────────────
-
-/** POST /auth/vote/challenge  (requires Bearer session token) */
-export async function voteChallengeHandler(req: AuthedRequest, res: Response, next: NextFunction) {
+export async function voteChallengeHandler(req, res, next) {
   try {
-    const options = await getAuthenticationOptions(req.user!.userId);
+    const options = await getAuthenticationOptions(req.user.userId);
     res.json(options);
   } catch (err) {
     next(err);
   }
 }
 
-/**
- * POST /auth/vote/verify  { credential }  (requires Bearer session token)
- *
- * Biometric vote auth — issues a short-lived voteToken.
- */
-export async function voteVerifyHandler(req: AuthedRequest, res: Response, next: NextFunction) {
+export async function voteVerifyHandler(req, res, next) {
   try {
     const { credential } = req.body;
-    const result = await verifyVoteAuth(req.user!.userId, credential);
+    const result = await verifyVoteAuth(req.user.userId, credential);
     res.json(result);
   } catch (err) {
     next(err);
   }
 }
 
-/**
- * POST /auth/vote/verify-pin  { pin }  (requires Bearer session token)
- *
- * PIN-based vote auth — alternative to biometric for users who prefer PIN.
- * Issues a short-lived voteToken identical to the biometric path.
- */
-export async function votePinVerifyHandler(req: AuthedRequest, res: Response, next: NextFunction) {
+export async function votePinVerifyHandler(req, res, next) {
   try {
     const { pin } = req.body;
-    const result = await verifyVotePinAuth(req.user!.userId, pin);
+    const result = await verifyVotePinAuth(req.user.userId, pin);
     res.json(result);
   } catch (err) {
     next(err);
@@ -163,13 +129,13 @@ export async function votePinVerifyHandler(req: AuthedRequest, res: Response, ne
 }
 
 export async function candidateRequestChallengeHandler(
-  req: AuthedRequest,
-  res: Response,
-  next: NextFunction
-) {
+req,
+res,
+next)
+{
   try {
     const { requestId } = req.body;
-    const options = await getCandidateRequestAuthenticationOptions(req.user!.userId, requestId);
+    const options = await getCandidateRequestAuthenticationOptions(req.user.userId, requestId);
     res.json(options);
   } catch (err) {
     next(err);
@@ -177,14 +143,14 @@ export async function candidateRequestChallengeHandler(
 }
 
 export async function candidateRequestVerifyHandler(
-  req: AuthedRequest,
-  res: Response,
-  next: NextFunction
-) {
+req,
+res,
+next)
+{
   try {
     const { requestId, credential } = req.body;
     const authToken = await verifyCandidateRequestAuthentication(
-      req.user!.userId,
+      req.user.userId,
       requestId,
       credential
     );
@@ -195,14 +161,14 @@ export async function candidateRequestVerifyHandler(
 }
 
 export async function candidateRequestPinHandler(
-  req: AuthedRequest,
-  res: Response,
-  next: NextFunction
-) {
+req,
+res,
+next)
+{
   try {
     const { requestId, pin } = req.body;
     const authToken = await candidateRequestService.createAcceptAuthToken(
-      req.user!.userId,
+      req.user.userId,
       requestId,
       pin
     );

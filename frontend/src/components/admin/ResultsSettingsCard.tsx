@@ -4,38 +4,24 @@ import { Card } from "../shared/Card";
 import { Button } from "../shared/Button";
 import { useUpdateResultsSettings } from "../../hooks/useAdminElections";
 import { useToast } from "../../contexts/ToastContext";
-import { formatError } from "../../lib/formatError";
+import { formatError } from "../../lib/formatError";import { jsxDEV as _jsxDEV, Fragment as _Fragment } from "react/jsx-dev-runtime";
 
-interface Props {
-  electionId: string;
-  liveResultsEnabled: boolean;
-  resultsReleaseAt: string | null;
-  resultsPublishedAt: string | null;
-  onUpdated: () => void | Promise<void>;
-}
-
-/** Formats a date for a <input type="datetime-local"> value in local time. */
-function toLocalInput(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
+function toLocalInput(d) {
+  const pad = (n) => {return String(n).padStart(2, "0");};
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/**
- * Shows the results option chosen when voting was scheduled, and lets the
- * admin change it afterwards — switch to live, or push a manual release
- * date later. Works while voting is scheduled, open, or already closed.
- */
 export function ResultsSettingsCard({
   electionId,
   liveResultsEnabled,
   resultsReleaseAt,
   resultsPublishedAt,
-  onUpdated,
-}: Props) {
+  onUpdated
+}) {
   const { updateResultsSettings, loading } = useUpdateResultsSettings();
   const { show } = useToast();
   const [editing, setEditing] = useState(false);
-  const [mode, setMode] = useState<"live" | "manual">(liveResultsEnabled ? "live" : "manual");
+  const [mode, setMode] = useState(liveResultsEnabled ? "live" : "manual");
   const [releaseInput, setReleaseInput] = useState(
     resultsReleaseAt ? toLocalInput(new Date(resultsReleaseAt)) : ""
   );
@@ -54,7 +40,7 @@ export function ResultsSettingsCard({
         }
         await updateResultsSettings(electionId, {
           mode: "manual",
-          resultsReleaseAt: date.toISOString(),
+          resultsReleaseAt: date.toISOString()
         });
       }
       show("Results settings updated.", "success");
@@ -66,84 +52,110 @@ export function ResultsSettingsCard({
   }
 
   return (
-    <Card className="mt-4 p-4">
-      <p className="text-sm font-semibold text-navy-900">Results</p>
+    _jsxDEV(Card, {
+ className: "mt-4 p-4", children: [
+      _jsxDEV("p", { className: "text-sm font-semibold text-navy-900", children: "Results" }, void 0, false),
 
-      {!editing ? (
-        <div className="mt-2 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm text-navy-700">
-            {liveResultsEnabled ? (
-              <>
-                <Radio className="h-4 w-4 flex-shrink-0 text-emerald-500" />
-                <span>Live results {published ? "(visible to voters)" : ""}</span>
-              </>
-            ) : resultsReleaseAt ? (
-              <>
-                <CalendarClock className="h-4 w-4 flex-shrink-0 text-gold-600" />
-                <span>
-                  {published ? "Released" : "Releases"} {new Date(resultsReleaseAt).toLocaleString()}
-                </span>
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-navy-400" />
-                <span>Not configured</span>
-              </>
-            )}
-          </div>
-          <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
-            {resultsReleaseAt && !liveResultsEnabled ? "Extend / change" : "Change"}
-          </Button>
-        </div>
-      ) : (
-        <div className="mt-3">
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setMode("live")}
-              className={`flex-1 rounded-lg border px-3 py-2 text-left text-sm font-medium ${
-                mode === "live"
-                  ? "border-emerald-400 bg-emerald-400/10 text-emerald-700"
-                  : "border-navy-200 text-navy-600 hover:bg-navy-50"
-              }`}
-            >
-              Live results
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("manual")}
-              className={`flex-1 rounded-lg border px-3 py-2 text-left text-sm font-medium ${
-                mode === "manual"
-                  ? "border-gold-400 bg-gold-400/15 text-gold-700"
-                  : "border-navy-200 text-navy-600 hover:bg-navy-50"
-              }`}
-            >
-              Manual release date
-            </button>
-          </div>
+      !editing ?
+      _jsxDEV("div", {
+ className: "mt-2 flex items-center justify-between gap-3", children: [
+        _jsxDEV("div", {
+ className: "flex items-center gap-2 text-sm text-navy-700", children:
+          liveResultsEnabled ?
+          _jsxDEV(_Fragment, {
+ children: [
+            _jsxDEV(Radio, { className: "h-4 w-4 flex-shrink-0 text-emerald-500" }, void 0, false),
+            _jsxDEV("span", { children: ["Live results ", published ? "(visible to voters)" : ""] }, void 0, true)] 
+}, void 0, true
+          ) :
+          resultsReleaseAt ?
+          _jsxDEV(_Fragment, {
+ children: [
+            _jsxDEV(CalendarClock, { className: "h-4 w-4 flex-shrink-0 text-gold-600" }, void 0, false),
+            _jsxDEV("span", {
+ children: [
+              published ? "Released" : "Releases", " ", new Date(resultsReleaseAt).toLocaleString()] 
+}, void 0, true
+            )] 
+}, void 0, true
+          ) :
 
-          {mode === "manual" && (
-            <label className="mt-3 block text-xs font-medium text-navy-500">
-              Release results at
-              <input
-                type="datetime-local"
-                value={releaseInput}
-                onChange={(e) => setReleaseInput(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-navy-200 px-3 py-2 text-sm text-navy-900 focus:border-gold-400 focus:outline-none focus:ring-2 focus:ring-gold-400/20"
-              />
-            </label>
-          )}
+          _jsxDEV(_Fragment, {
+ children: [
+            _jsxDEV(CheckCircle2, { className: "h-4 w-4 flex-shrink-0 text-navy-400" }, void 0, false),
+            _jsxDEV("span", { children: "Not configured" }, void 0, false)] 
+}, void 0, true
+          ) 
+}, void 0, false
 
-          <div className="mt-3 flex gap-2">
-            <Button size="sm" loading={loading} onClick={handleSave}>
-              Save
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => setEditing(false)}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
-    </Card>
-  );
+        ),
+        _jsxDEV(Button, {
+ size: "sm", variant: "secondary", onClick: () => {return setEditing(true);}, children:
+          resultsReleaseAt && !liveResultsEnabled ? "Extend / change" : "Change" 
+}, void 0, false
+        )] 
+}, void 0, true
+      ) :
+
+      _jsxDEV("div", {
+ className: "mt-3", children: [
+        _jsxDEV("div", {
+ className: "flex gap-2", children: [
+          _jsxDEV("button", {
+            type: "button",
+            onClick: () => {return setMode("live");},
+            className: `flex-1 rounded-lg border px-3 py-2 text-left text-sm font-medium ${
+            mode === "live" ?
+            "border-emerald-400 bg-emerald-400/10 text-emerald-700" :
+            "border-navy-200 text-navy-600 hover:bg-navy-50"}`, children:
+
+            "Live results" 
+}, void 0, false
+
+          ),
+          _jsxDEV("button", {
+            type: "button",
+            onClick: () => {return setMode("manual");},
+            className: `flex-1 rounded-lg border px-3 py-2 text-left text-sm font-medium ${
+            mode === "manual" ?
+            "border-gold-400 bg-gold-400/15 text-gold-700" :
+            "border-navy-200 text-navy-600 hover:bg-navy-50"}`, children:
+
+            "Manual release date" 
+}, void 0, false
+
+          )] 
+}, void 0, true
+        ),
+
+        mode === "manual" &&
+        _jsxDEV("label", {
+ className: "mt-3 block text-xs font-medium text-navy-500", children: ["Release results at",
+
+          _jsxDEV("input", {
+            type: "datetime-local",
+            value: releaseInput,
+            onChange: (e) => {return setReleaseInput(e.target.value);},
+            className: "mt-1 w-full rounded-lg border border-navy-200 px-3 py-2 text-sm text-navy-900 focus:border-gold-400 focus:outline-none focus:ring-2 focus:ring-gold-400/20" 
+}, void 0, false
+          )] 
+}, void 0, true
+        ),
+
+        _jsxDEV("div", {
+ className: "mt-3 flex gap-2", children: [
+          _jsxDEV(Button, { size: "sm", loading: loading, onClick: handleSave, children: "Save" }, void 0, false
+
+          ),
+          _jsxDEV(Button, { size: "sm", variant: "secondary", onClick: () => {return setEditing(false);}, children: "Cancel" }, void 0, false
+
+          )] 
+}, void 0, true
+        )] 
+}, void 0, true
+      )] 
+}, void 0, true
+
+    ));
+
 }

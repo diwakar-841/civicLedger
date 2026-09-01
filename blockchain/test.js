@@ -1,9 +1,3 @@
-/**
- * Plain-Node contract test runner (replaces Hardhat's "npx hardhat test").
- * Deploys a fresh instance to Ganache and exercises the core voting flow.
- *
- * Usage: node compile.js && node test.js
- */
 require("dotenv").config();
 const fs = require("fs");
 const path = require("path");
@@ -28,13 +22,11 @@ async function main() {
   await voting.waitForDeployment();
   console.log("Test deployment at:", await voting.getAddress());
 
-  // 1. Register candidates
   await (await voting.registerCandidate("Alice")).wait();
   await (await voting.registerCandidate("Bob")).wait();
   assert.strictEqual(Number(await voting.candidateCount()), 2, "expected 2 candidates");
   console.log("PASS: candidates registered");
 
-  // 2. Voting before election opens should revert
   await (await voting.registerVoter(await voter1.getAddress())).wait();
   let revertedBeforeOpen = false;
   try {
@@ -45,11 +37,9 @@ async function main() {
   assert.ok(revertedBeforeOpen, "expected revert before election opens");
   console.log("PASS: vote blocked before election opens");
 
-  // 3. Open election, register second voter
   await (await voting.setElectionOpen(true)).wait();
   await (await voting.registerVoter(await voter2.getAddress())).wait();
 
-  // 4. Unregistered address cannot vote
   let revertedUnregistered = false;
   try {
     await (await voting.connect(outsider).castVote(1)).wait();
@@ -59,11 +49,9 @@ async function main() {
   assert.ok(revertedUnregistered, "expected revert for unregistered voter");
   console.log("PASS: unregistered voter blocked");
 
-  // 5. Cast votes
   await (await voting.connect(voter1).castVote(1)).wait();
   await (await voting.connect(voter2).castVote(2)).wait();
 
-  // 6. Double voting should revert
   let revertedDoubleVote = false;
   try {
     await (await voting.connect(voter1).castVote(2)).wait();
@@ -73,7 +61,6 @@ async function main() {
   assert.ok(revertedDoubleVote, "expected revert on double vote");
   console.log("PASS: double vote blocked");
 
-  // 7. Tally check
   const results = await voting.getResults();
   assert.strictEqual(Number(results[0]), 1, "Alice should have 1 vote");
   assert.strictEqual(Number(results[1]), 1, "Bob should have 1 vote");

@@ -1,28 +1,27 @@
 import { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuthContext } from "../../contexts/AuthContext";
-import { Spinner } from "../shared/Spinner";
+import { Spinner } from "../shared/Spinner";import { jsxDEV as _jsxDEV, Fragment as _Fragment } from "react/jsx-dev-runtime";
 
-export function ProtectedRoute({ children }: { children: ReactNode }) {
+export function ProtectedRoute({ children }) {
   const { isAuthenticated, isLoading } = useAuthContext();
 
-  if (isLoading) return <Spinner label="Checking your session" />;
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
-  return <>{children}</>;
+  if (isLoading) {return _jsxDEV(Spinner, { label: "Checking your session" }, void 0, false);}
+  if (!isAuthenticated) {return _jsxDEV(Navigate, { to: "/login", replace: true }, void 0, false);}
+  return _jsxDEV(_Fragment, { children: children }, void 0, false);
 }
 
-export function AdminRoute({ children }: { children: ReactNode }) {
+export function AdminRoute({ children }) {
   const { isAuthenticated, isAdmin, isLoading, user } = useAuthContext();
   const location = useLocation();
 
-  if (isLoading) return <Spinner label="Checking your session" />;
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (!isAdmin) return <Navigate to="/home" replace />;
+  if (isLoading) {return _jsxDEV(Spinner, { label: "Checking your session" }, void 0, false);}
+  if (!isAuthenticated) {return _jsxDEV(Navigate, { to: "/login", replace: true }, void 0, false);}
+  if (!isAdmin) {return _jsxDEV(Navigate, { to: "/home", replace: true }, void 0, false);}
 
-  // Admin must have 2FA enabled to access admin pages
   if (user && !user.isTwoFactorEnabled) {
-    return <Navigate to="/admin/require-2fa" state={{ from: location.pathname }} replace />;
+    return _jsxDEV(Navigate, { to: "/admin/require-2fa", state: { from: location.pathname }, replace: true }, void 0, false);
   }
 
-  return <>{children}</>;
+  return _jsxDEV(_Fragment, { children: children }, void 0, false);
 }

@@ -13,5 +13,5 @@ export const candidates = pgTable("candidates", {
   bio: text("bio"),
   qualification: text("qualification"),
   supports: text("supports"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 });

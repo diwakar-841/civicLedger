@@ -11,40 +11,37 @@ import { logger } from "../lib/logger";
 import { createSession } from "./session.service";
 import { toVoterId } from "./auth.service";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function generateOtp(): string {
+function generateOtp() {
   return String(crypto.randomInt(100000, 1000000));
 }
 
-function normalizeDob(raw: string): string {
+function normalizeDob(raw) {
   const trimmed = raw.trim();
-  if (/^\d{4}-\d{2}-\d{2}T/.test(trimmed)) return trimmed.slice(0, 10);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(trimmed)) {return trimmed.slice(0, 10);}
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {return trimmed;}
   const dmY = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (dmY) return `${dmY[3]}-${dmY[2]}-${dmY[1]}`;
+  if (dmY) {return `${dmY[3]}-${dmY[2]}-${dmY[1]}`;}
   const mdY = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (mdY) return `${mdY[3]}-${mdY[1]}-${mdY[2]}`;
+  if (mdY) {return `${mdY[3]}-${mdY[1]}-${mdY[2]}`;}
   return trimmed;
 }
 
-function normalizePhone(raw: string): string {
+function normalizePhone(raw) {
   const digits = raw.replace(/\D/g, "");
   return digits.length === 10 ? `+91${digits}` : raw.trim();
 }
 
-// ─── Step 1: verify DOB + unique phone, send OTP ──────────────────────────────
-export async function verifyIdentity(kycToken: string, phone: string, dob: string) {
-  let payload: { userId: string; purpose: string };
+export async function verifyIdentity(kycToken, phone, dob) {
+  let payload;
   try {
-    payload = jwt.verify(kycToken, env.JWT_SECRET) as { userId: string; purpose: string };
+    payload = jwt.verify(kycToken, env.JWT_SECRET);
   } catch {
     throw new UnauthorizedError("Session expired — please sign in again");
   }
-  if (payload.purpose !== "kyc-1") throw new UnauthorizedError("Invalid token purpose");
+  if (payload.purpose !== "kyc-1") {throw new UnauthorizedError("Invalid token purpose");}
 
   const user = await db.query.users.findFirst({ where: eq(users.id, payload.userId) });
-  if (!user) throw new UnauthorizedError("User not found");
+  if (!user) {throw new UnauthorizedError("User not found");}
 
   const normalizedInputDob = normalizeDob(dob);
   const normalizedStoredDob = normalizeDob(user.dob ?? "");
@@ -60,28 +57,24 @@ export async function verifyIdentity(kycToken: string, phone: string, dob: strin
 
   const otp = generateOtp();
   const otpHash = await bcrypt.hash(otp, 8);
-  const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+  const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
-  await db
-    .update(users)
-    .set({
-      phone: normalizedPhone,
-      phoneVerified: false,
-      phoneVerificationOtpHash: otpHash,
-      phoneVerificationOtpExpiresAt: otpExpiry,
-    })
-    .where(eq(users.id, user.id));
+  await db.
+  update(users).
+  set({
+    phone: normalizedPhone,
+    phoneVerified: false,
+    phoneVerificationOtpHash: otpHash,
+    phoneVerificationOtpExpiresAt: otpExpiry
+  }).
+  where(eq(users.id, user.id));
 
   let delivered = true;
   try {
     ({ delivered } = await sendPhoneVerificationOtp(normalizedPhone, otp));
   } catch (err) {
     logger.error("Failed to send phone verification SMS", { userId: user.id, error: String(err) });
-    // NOTE: previously this rolled back the OTP and threw in production,
-    // blocking the flow entirely whenever the SMS provider failed. Real SMS
-    // delivery isn't set up yet, so instead we fall through in every
-    // environment and hand the code back to the client to enter manually —
-    // same as the existing dev-only behavior below.
+
     delivered = false;
   }
 
@@ -92,29 +85,22 @@ export async function verifyIdentity(kycToken: string, phone: string, dob: strin
   const kycToken2 = jwt.sign({ userId: user.id, purpose: "kyc-2" }, env.JWT_SECRET, { expiresIn: "15m" });
   recordAudit(user.id, "PHONE_VERIFICATION_INITIATED").catch(() => {});
 
-  // The OTP couldn't actually reach the phone — no SMS provider configured,
-  // or the send attempt failed. Hand it back to the client so the flow isn't
-  // blocked. TEMPORARY: enabled in all environments, including production,
-  // until real SMS delivery is set up. Revert this to
-  // `!delivered && env.NODE_ENV !== "production"` once SMS works, so real
-  // users never see another user's OTP reflected back in a response.
   const devOtp = !delivered ? otp : undefined;
 
   return { kycToken: kycToken2, devOtp };
 }
 
-// ─── Step 2: verify phone OTP and complete the account ─────────────────────────
-export async function verifyOtp(kycToken: string, otp: string) {
-  let payload: { userId: string; purpose: string };
+export async function verifyOtp(kycToken, otp) {
+  let payload;
   try {
-    payload = jwt.verify(kycToken, env.JWT_SECRET) as { userId: string; purpose: string };
+    payload = jwt.verify(kycToken, env.JWT_SECRET);
   } catch {
     throw new UnauthorizedError("Session expired — please sign in again");
   }
-  if (payload.purpose !== "kyc-2") throw new UnauthorizedError("Invalid token purpose");
+  if (payload.purpose !== "kyc-2") {throw new UnauthorizedError("Invalid token purpose");}
 
   const user = await db.query.users.findFirst({ where: eq(users.id, payload.userId) });
-  if (!user) throw new UnauthorizedError("User not found");
+  if (!user) {throw new UnauthorizedError("User not found");}
 
   if (!user.phoneVerificationOtpHash || !user.phoneVerificationOtpExpiresAt) {
     throw new BadRequestError("No phone verification code found — request a new one");
@@ -124,17 +110,17 @@ export async function verifyOtp(kycToken: string, otp: string) {
   }
 
   const otpOk = await bcrypt.compare(otp.trim(), user.phoneVerificationOtpHash);
-  if (!otpOk) throw new BadRequestError("Incorrect verification code");
+  if (!otpOk) {throw new BadRequestError("Incorrect verification code");}
 
-  await db
-    .update(users)
-    .set({
-      phoneVerified: true,
-      isVerified: true,
-      phoneVerificationOtpHash: null,
-      phoneVerificationOtpExpiresAt: null,
-    })
-    .where(eq(users.id, user.id));
+  await db.
+  update(users).
+  set({
+    phoneVerified: true,
+    isVerified: true,
+    phoneVerificationOtpHash: null,
+    phoneVerificationOtpExpiresAt: null
+  }).
+  where(eq(users.id, user.id));
 
   recordAudit(user.id, "PHONE_VERIFIED").catch(() => {});
 
@@ -156,45 +142,43 @@ export async function verifyOtp(kycToken: string, otp: string) {
       isTwoFactorEnabled: user.isTwoFactorEnabled,
       isBiometricRegistered: user.isBiometricRegistered,
       phone: user.phone,
-      dob: user.dob,
-    },
+      dob: user.dob
+    }
   };
 }
 
-// ─── Resend OTP ────────────────────────────────────────────────────────────────
-export async function resendKycOtp(kycToken: string) {
-  let payload: { userId: string; purpose: string };
+export async function resendKycOtp(kycToken) {
+  let payload;
   try {
-    payload = jwt.verify(kycToken, env.JWT_SECRET) as { userId: string; purpose: string };
+    payload = jwt.verify(kycToken, env.JWT_SECRET);
   } catch {
     throw new UnauthorizedError("Session expired — please sign in again");
   }
-  if (payload.purpose !== "kyc-2") throw new UnauthorizedError("Invalid token purpose");
+  if (payload.purpose !== "kyc-2") {throw new UnauthorizedError("Invalid token purpose");}
 
   const user = await db.query.users.findFirst({ where: eq(users.id, payload.userId) });
-  if (!user) throw new UnauthorizedError("User not found");
+  if (!user) {throw new UnauthorizedError("User not found");}
 
   const otp = generateOtp();
   const otpHash = await bcrypt.hash(otp, 8);
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
-  if (!user.phone) throw new BadRequestError("Please provide your phone number first");
+  if (!user.phone) {throw new BadRequestError("Please provide your phone number first");}
 
-  await db
-    .update(users)
-    .set({
-      phoneVerificationOtpHash: otpHash,
-      phoneVerificationOtpExpiresAt: otpExpiry,
-    })
-    .where(eq(users.id, user.id));
+  await db.
+  update(users).
+  set({
+    phoneVerificationOtpHash: otpHash,
+    phoneVerificationOtpExpiresAt: otpExpiry
+  }).
+  where(eq(users.id, user.id));
 
   let delivered = true;
   try {
     ({ delivered } = await sendPhoneVerificationOtp(user.phone, otp));
   } catch (err) {
     logger.error("Failed to resend phone verification SMS", { userId: user.id, error: String(err) });
-    // See note in verifyIdentity above — temporarily falling through in every
-    // environment instead of throwing, until real SMS delivery is set up.
+
     delivered = false;
   }
 
@@ -202,7 +186,6 @@ export async function resendKycOtp(kycToken: string) {
     logger.info(`[Phone OTP resend — dev] Code for ${user.phone}: ${otp}`);
   }
 
-  // TEMPORARY: see note in verifyIdentity above.
   const devOtp = !delivered ? otp : undefined;
 
   return { devOtp };

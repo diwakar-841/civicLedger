@@ -22,128 +22,110 @@ import {
   resendVerificationPublicHandler,
   forgotPasswordHandler,
   resetPasswordHandler,
-  sessionPinHandler,
-} from "../controllers/auth.controller";
+  sessionPinHandler 
+} from
+"../controllers/auth.controller";
 import { validate } from "../middlewares/validate.middleware";
 import { requireAuth } from "../middlewares/auth.middleware";
 import { authLimiter, authSlowDown, resendVerifyLimiter } from "../middlewares/rateLimit";
 
 const router = Router();
 
-export const passwordSchema = z
-  .string()
-  .min(10, "Password must be at least 10 characters")
-  .max(128)
-  .regex(/[a-z]/, "Password must include a lowercase letter")
-  .regex(/[A-Z]/, "Password must include an uppercase letter")
-  .regex(/[0-9]/, "Password must include a number");
+export const passwordSchema = z.
+string().
+min(10, "Password must be at least 10 characters").
+max(128).
+regex(/[a-z]/, "Password must include a lowercase letter").
+regex(/[A-Z]/, "Password must include an uppercase letter").
+regex(/[0-9]/, "Password must include a number");
 
-/** Returns true when the date string represents someone aged >= minAge years. */
-function isOldEnough(dob: string, minAge: number): boolean {
+function isOldEnough(dob, minAge) {
   const birth = new Date(dob);
-  if (isNaN(birth.getTime())) return false;
+  if (isNaN(birth.getTime())) {return false;}
   const cutoff = new Date();
   cutoff.setFullYear(cutoff.getFullYear() - minAge);
   return birth <= cutoff;
 }
 
-// ── New multi-step registration schemas ───────────────────────────────────────
-
 const registerInitiateSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
-  email: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .email()
-    .refine((value) => value.endsWith("@gmail.com"), "Please use a Gmail address"),
-  dob: z
-    .string()
-    .refine((v) => isOldEnough(v, 16), { message: "You must be at least 16 years old to register" }),
-  emailVerificationMethod: z.enum(["otp", "link"]).default("otp"),
+  email: z.
+  string().
+  trim().
+  toLowerCase().
+  email().
+  refine((value) => {return value.endsWith("@gmail.com");}, "Please use a Gmail address"),
+  dob: z.
+  string().
+  refine((v) => {return isOldEnough(v, 16);}, { message: "You must be at least 16 years old to register" }),
+  emailVerificationMethod: z.enum(["otp", "link"]).default("otp")
 });
 
 const registerVerifyOtpSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
-  otp: z.string().regex(/^\d{6}$/, "Email verification code must be 6 digits"),
+  otp: z.string().regex(/^\d{6}$/, "Email verification code must be 6 digits")
 });
 
 const registerSetPasswordSchema = z.object({
   setPasswordToken: z.string().min(1),
-  password: passwordSchema,
+  password: passwordSchema
 });
-
-// ── Login schemas ─────────────────────────────────────────────────────────────
 
 const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
-  password: z.string().min(1),
+  password: z.string().min(1)
 });
 
 const login2faSchema = z.object({
   challengeToken: z.string().min(1),
-  code: z.string().min(1),
+  code: z.string().min(1)
 });
 
 const loginPinSchema = z.object({
   loginToken: z.string().min(1),
-  pin: z.string().regex(/^\d{6}$/, "PIN must be exactly 6 digits"),
+  pin: z.string().regex(/^\d{6}$/, "PIN must be exactly 6 digits")
 });
 
 const setupPinsSchema = z.object({
   loginPin: z.string().regex(/^\d{6}$/, "Login PIN must be exactly 6 digits"),
-  votingPin: z.string().regex(/^\d{6}$/, "Voting PIN must be exactly 6 digits"),
+  votingPin: z.string().regex(/^\d{6}$/, "Voting PIN must be exactly 6 digits")
 });
 
-// ── 2FA schemas ───────────────────────────────────────────────────────────────
+const totpCodeSchema = z.object({ code: z.string().min(1) });
 
-const totpCodeSchema = z.object({
-  code: z.string().min(1),
-});
-
-// ── Password reset / email schemas ────────────────────────────────────────────
-
-const forgotPasswordSchema = z.object({
-  email: z.string().trim().toLowerCase().email(),
-});
+const forgotPasswordSchema = z.object({ email: z.string().trim().toLowerCase().email() });
 
 const resetPasswordSchema = z.object({
   token: z.string().min(1),
-  password: passwordSchema,
+  password: passwordSchema
 });
 
 const resendVerificationPublicSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
-  method: z.enum(["otp", "link"]).optional(),
+  method: z.enum(["otp", "link"]).optional()
 });
 
-// ── Registration (multi-step) ─────────────────────────────────────────────────
 router.post("/register/initiate", authLimiter, authSlowDown, validate(registerInitiateSchema), registerInitiate);
 router.post("/register/verify-otp", authLimiter, authSlowDown, validate(registerVerifyOtpSchema), registerVerifyOtp);
-router.post("/register/set-password", authLimiter,              validate(registerSetPasswordSchema),  registerSetPassword);
+router.post("/register/set-password", authLimiter, validate(registerSetPasswordSchema), registerSetPassword);
 
-// ── Login ─────────────────────────────────────────────────────────────────────
-router.post("/login",      authLimiter, authSlowDown, validate(loginSchema),     login);
-router.post("/login/2fa",  authLimiter, authSlowDown, validate(login2faSchema),  login2faHandler);
-router.post("/login-pin",  authLimiter, authSlowDown, validate(loginPinSchema),  loginPinHandler);
-router.get("/me",          requireAuth, me);
+router.post("/login", authLimiter, authSlowDown, validate(loginSchema), login);
+router.post("/login/2fa", authLimiter, authSlowDown, validate(login2faSchema), login2faHandler);
+router.post("/login-pin", authLimiter, authSlowDown, validate(loginPinSchema), loginPinHandler);
+router.get("/me", requireAuth, me);
 
-// ── PIN setup (authenticated — called once after biometric registration) ───────
 router.post("/pins/setup", requireAuth, authLimiter, validate(setupPinsSchema), setupPinsHandler);
 
-// ── Session management ────────────────────────────────────────────────────────
-router.post("/refresh",             refresh);
-router.post("/logout",              logout);
-router.post("/logout-all",          requireAuth, logoutAll);
-router.get("/sessions",             requireAuth, listSessions);
-router.delete("/sessions/:id",      requireAuth, revokeSession);
+router.post("/refresh", refresh);
+router.post("/logout", logout);
+router.post("/logout-all", requireAuth, logoutAll);
+router.get("/sessions", requireAuth, listSessions);
+router.delete("/sessions/:id", requireAuth, revokeSession);
 
-// ── 2FA (TOTP — for admins) ───────────────────────────────────────────────────
-router.post("/2fa/setup",   requireAuth, setup2fa);
-router.post("/2fa/enable",  requireAuth, validate(totpCodeSchema), enable2fa);
+router.post("/2fa/setup", requireAuth, setup2fa);
+router.post("/2fa/enable", requireAuth, validate(totpCodeSchema), enable2fa);
 router.post("/2fa/disable", requireAuth, validate(totpCodeSchema), disable2fa);
 
-// ── Email verification ────────────────────────────────────────────────────────
 router.get("/verify-email/:token", verifyEmailHandler);
 router.post("/resend-verification", requireAuth, resendVerifyLimiter, resendVerificationHandler);
 router.post(
@@ -153,12 +135,9 @@ router.post(
   resendVerificationPublicHandler
 );
 
-// ── Password reset ────────────────────────────────────────────────────────────
 router.post("/forgot-password", authLimiter, validate(forgotPasswordSchema), forgotPasswordHandler);
-router.post("/reset-password",  authLimiter, validate(resetPasswordSchema),  resetPasswordHandler);
+router.post("/reset-password", authLimiter, validate(resetPasswordSchema), resetPasswordHandler);
 
-
-// ── Admin action step-up via Login PIN (authenticated) ───────────────────────
 const sessionPinSchema = z.object({ pin: z.string().regex(/^\d{6}$/, "PIN must be exactly 6 digits") });
 router.post("/session-pin", requireAuth, authLimiter, validate(sessionPinSchema), sessionPinHandler);
 

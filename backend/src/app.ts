@@ -14,7 +14,6 @@ export const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
 
-// Parse RPC_URL origin for CSP connect-src
 const rpcOrigin = (() => {
   try {
     const u = new URL(env.RPC_URL);
@@ -36,25 +35,20 @@ app.use(
         fontSrc: ["'self'"],
         objectSrc: ["'none'"],
         mediaSrc: ["'self'"],
-        frameSrc: ["'none'"],
-      },
-    },
+        frameSrc: ["'none'"]
+      }
+    }
   })
 );
 app.use(
   cors({
     origin: allowedOrigins,
-    credentials: true,
+    credentials: true
   })
 );
 app.use(cookieParser());
 app.use(hpp());
 
-// FIX: Increased body limit from 100kb to 1mb.
-// WebAuthn credential responses (attestation objects, authenticator data,
-// public keys encoded in base64url) can exceed 100 KB and were triggering
-// "PayloadTooLargeError: request entity too large" / buffer parse errors
-// during fingerprint and face-ID registration.
 app.use(express.json({ limit: "1mb" }));
 
 app.use((req, res, next) => {
@@ -64,7 +58,7 @@ app.use((req, res, next) => {
       method: req.method,
       path: req.path,
       status: res.statusCode,
-      ms: Date.now() - start,
+      ms: Date.now() - start
     });
   });
   next();
@@ -72,7 +66,7 @@ app.use((req, res, next) => {
 
 app.use(apiLimiter);
 
-app.get("/health", (_req, res) => res.json({ status: "ok" }));
+app.get("/health", (_req, res) => {return res.json({ status: "ok" });});
 app.use("/api", routes);
 
 app.use(notFoundHandler);

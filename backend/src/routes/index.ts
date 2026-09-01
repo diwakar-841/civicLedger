@@ -15,7 +15,7 @@ import groupRoutes from "./groups.routes";
 const router = Router();
 
 router.use("/auth", authRoutes);
-router.use("/auth", kycRoutes);   // KYC + biometric + vote-auth endpoints
+router.use("/auth", kycRoutes);
 router.use("/wallet", walletRoutes);
 router.use("/elections", electionRoutes);
 router.use("/candidates", candidateRoutes);

@@ -1,20 +1,12 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode } from "react";import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
 
-type Theme = "light" | "dark";
+const ThemeContext = createContext(undefined);
 
-interface ThemeContextValue {
-  theme: Theme;
-  toggle: () => void;
-}
-
-const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
-
-export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
+export function ThemeProvider({ children }) {
+  const [theme, setTheme] = useState(() => {
     const stored = localStorage.getItem("cl-theme-v2");
-    if (stored === "light" || stored === "dark") return stored;
-    // Light is the safer default for a public ballot: higher contrast and
-    // familiar paper-like reading surface on phones and desktop.
+    if (stored === "light" || stored === "dark") {return stored;}
+
     return "light";
   });
 
@@ -29,18 +21,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [theme]);
 
   function toggle() {
-    setTheme((t) => (t === "dark" ? "light" : "dark"));
+    setTheme((t) => {return t === "dark" ? "light" : "dark";});
   }
 
   return (
-    <ThemeContext.Provider value={{ theme, toggle }}>
-      {children}
-    </ThemeContext.Provider>
-  );
+    _jsxDEV(ThemeContext.Provider, {
+ value: { theme, toggle }, children:
+      children 
+}, void 0, false
+    ));
+
 }
 
 export function useTheme() {
   const ctx = useContext(ThemeContext);
-  if (!ctx) throw new Error("useTheme must be used within ThemeProvider");
+  if (!ctx) {throw new Error("useTheme must be used within ThemeProvider");}
   return ctx;
 }

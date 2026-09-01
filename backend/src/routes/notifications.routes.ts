@@ -4,10 +4,9 @@ import { requireAuth } from "../middlewares/auth.middleware";
 
 const router = Router();
 
-// Get user notifications
-router.get("/", requireAuth, async (req: Request, res: Response) => {
+router.get("/", requireAuth, async (req, res) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = req.user.userId;
     const notifications = await notificationService.getUserNotifications(userId);
     res.json(notifications);
   } catch (error) {
@@ -16,10 +15,9 @@ router.get("/", requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-// Get unread notifications
-router.get("/unread", requireAuth, async (req: Request, res: Response) => {
+router.get("/unread", requireAuth, async (req, res) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = req.user.userId;
     const notifications = await notificationService.getUnreadNotifications(userId);
     res.json(notifications);
   } catch (error) {
@@ -28,11 +26,10 @@ router.get("/unread", requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-// Mark notification as read
-router.patch("/:notificationId/read", requireAuth, async (req: Request, res: Response) => {
+router.patch("/:notificationId/read", requireAuth, async (req, res) => {
   try {
     const { notificationId } = req.params;
-    await notificationService.markAsRead(notificationId, (req as any).user.userId);
+    await notificationService.markAsRead(notificationId, req.user.userId);
     res.json({ success: true });
   } catch (error) {
     console.error("[v0] Error marking as read:", error);
@@ -40,10 +37,9 @@ router.patch("/:notificationId/read", requireAuth, async (req: Request, res: Res
   }
 });
 
-// Mark all as read
-router.patch("/read-all", requireAuth, async (req: Request, res: Response) => {
+router.patch("/read-all", requireAuth, async (req, res) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = req.user.userId;
     await notificationService.markAllAsRead(userId);
     res.json({ success: true });
   } catch (error) {
@@ -52,11 +48,10 @@ router.patch("/read-all", requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-// Delete notification
-router.delete("/:notificationId", requireAuth, async (req: Request, res: Response) => {
+router.delete("/:notificationId", requireAuth, async (req, res) => {
   try {
     const { notificationId } = req.params;
-    await notificationService.deleteNotification(notificationId, (req as any).user.userId);
+    await notificationService.deleteNotification(notificationId, req.user.userId);
     res.json({ success: true });
   } catch (error) {
     console.error("[v0] Error deleting notification:", error);
@@ -64,10 +59,9 @@ router.delete("/:notificationId", requireAuth, async (req: Request, res: Respons
   }
 });
 
-// Get notification settings
-router.get("/settings", requireAuth, async (req: Request, res: Response) => {
+router.get("/settings", requireAuth, async (req, res) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = req.user.userId;
     const settings = await notificationService.getOrCreateSettings(userId);
     res.json(settings);
   } catch (error) {
@@ -76,15 +70,14 @@ router.get("/settings", requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-// Update notification settings
-router.patch("/settings", requireAuth, async (req: Request, res: Response) => {
+router.patch("/settings", requireAuth, async (req, res) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = req.user.userId;
     const { candidateNominationEmails, reminderEmails } = req.body;
 
     await notificationService.updateSettings(userId, {
       candidateNominationEmails,
-      reminderEmails,
+      reminderEmails
     });
 
     res.json({ success: true });

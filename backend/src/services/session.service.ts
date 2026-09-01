@@ -3,122 +3,107 @@ import { db, sessions } from "@voting/database";
 import { eq, and, lt, isNull } from "drizzle-orm";
 import { logger } from "../lib/logger";
 
-const REFRESH_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const REFRESH_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
-export function hashToken(raw: string): string {
+export function hashToken(raw) {
   return crypto.createHash("sha256").update(raw).digest("hex");
 }
 
-export function generateRawToken(): string {
+export function generateRawToken() {
   return crypto.randomBytes(40).toString("hex");
 }
 
-export async function createSession(params: {
-  userId: string;
-  userAgent?: string;
-  ipAddress?: string;
-}): Promise<{ rawToken: string; sessionId: string }> {
+export async function createSession(params)
+
+{
   const rawToken = generateRawToken();
   const refreshTokenHash = hashToken(rawToken);
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS);
 
-  const [session] = await db
-    .insert(sessions)
-    .values({
-      userId: params.userId,
-      refreshTokenHash,
-      userAgent: params.userAgent ?? null,
-      ipAddress: params.ipAddress ?? null,
-      expiresAt,
-    })
-    .returning();
+  const [session] = await db.
+  insert(sessions).
+  values({
+    userId: params.userId,
+    refreshTokenHash,
+    userAgent: params.userAgent ?? null,
+    ipAddress: params.ipAddress ?? null,
+    expiresAt
+  }).
+  returning();
 
   logger.info("Session created", { sessionId: session.id, userId: params.userId });
   return { rawToken, sessionId: session.id };
 }
 
-export async function rotateSession(oldRawToken: string, params: {
-  userAgent?: string;
-  ipAddress?: string;
-}): Promise<{ rawToken: string; sessionId: string; userId: string } | null> {
+export async function rotateSession(oldRawToken, params)
+
+{
   const oldHash = hashToken(oldRawToken);
 
-  // Find the session by hash
-  const oldSession = await db.query.sessions.findFirst({
-    where: eq(sessions.refreshTokenHash, oldHash),
-  });
+  const oldSession = await db.query.sessions.findFirst({ where: eq(sessions.refreshTokenHash, oldHash) });
 
-  if (!oldSession) return null;
+  if (!oldSession) {return null;}
 
-  // Check if this token was already rotated out (reuse detection = theft signal)
   if (oldSession.replacedByTokenHash !== null) {
-    // Revoke all sessions for this user (entire family)
-    await db
-      .update(sessions)
-      .set({ revokedAt: new Date() })
-      .where(eq(sessions.userId, oldSession.userId));
+
+    await db.
+    update(sessions).
+    set({ revokedAt: new Date() }).
+    where(eq(sessions.userId, oldSession.userId));
     logger.warn("Refresh token reuse detected - all sessions revoked", { userId: oldSession.userId });
     return null;
   }
 
-  // Check if revoked or expired
-  if (oldSession.revokedAt !== null) return null;
-  if (oldSession.expiresAt < new Date()) return null;
+  if (oldSession.revokedAt !== null) {return null;}
+  if (oldSession.expiresAt < new Date()) {return null;}
 
-  // Issue new token
   const newRawToken = generateRawToken();
   const newHash = hashToken(newRawToken);
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS);
 
-  // Mark old session as replaced
-  await db
-    .update(sessions)
-    .set({ replacedByTokenHash: newHash, revokedAt: new Date() })
-    .where(eq(sessions.id, oldSession.id));
+  await db.
+  update(sessions).
+  set({ replacedByTokenHash: newHash, revokedAt: new Date() }).
+  where(eq(sessions.id, oldSession.id));
 
-  // Insert new session
-  const [newSession] = await db
-    .insert(sessions)
-    .values({
-      userId: oldSession.userId,
-      refreshTokenHash: newHash,
-      userAgent: params.userAgent ?? oldSession.userAgent,
-      ipAddress: params.ipAddress ?? oldSession.ipAddress,
-      expiresAt,
-    })
-    .returning();
+  const [newSession] = await db.
+  insert(sessions).
+  values({
+    userId: oldSession.userId,
+    refreshTokenHash: newHash,
+    userAgent: params.userAgent ?? oldSession.userAgent,
+    ipAddress: params.ipAddress ?? oldSession.ipAddress,
+    expiresAt
+  }).
+  returning();
 
   return { rawToken: newRawToken, sessionId: newSession.id, userId: oldSession.userId };
 }
 
-export async function revokeSessionByToken(rawToken: string): Promise<boolean> {
+export async function revokeSessionByToken(rawToken) {
   const hash = hashToken(rawToken);
-  const session = await db.query.sessions.findFirst({
-    where: eq(sessions.refreshTokenHash, hash),
-  });
-  if (!session || session.revokedAt !== null) return false;
+  const session = await db.query.sessions.findFirst({ where: eq(sessions.refreshTokenHash, hash) });
+  if (!session || session.revokedAt !== null) {return false;}
   await db.update(sessions).set({ revokedAt: new Date() }).where(eq(sessions.id, session.id));
   return true;
 }
 
-export async function revokeSessionById(sessionId: string, userId: string): Promise<boolean> {
-  const session = await db.query.sessions.findFirst({
-    where: eq(sessions.id, sessionId),
-  });
-  if (!session || session.userId !== userId) return false;
-  if (session.revokedAt !== null) return false;
+export async function revokeSessionById(sessionId, userId) {
+  const session = await db.query.sessions.findFirst({ where: eq(sessions.id, sessionId) });
+  if (!session || session.userId !== userId) {return false;}
+  if (session.revokedAt !== null) {return false;}
   await db.update(sessions).set({ revokedAt: new Date() }).where(eq(sessions.id, sessionId));
   return true;
 }
 
-export async function revokeAllUserSessions(userId: string): Promise<void> {
-  await db
-    .update(sessions)
-    .set({ revokedAt: new Date() })
-    .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
+export async function revokeAllUserSessions(userId) {
+  await db.
+  update(sessions).
+  set({ revokedAt: new Date() }).
+  where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
 }
 
-export async function getUserActiveSessions(userId: string) {
+export async function getUserActiveSessions(userId) {
   const now = new Date();
   const rows = await db.query.sessions.findMany({
     where: eq(sessions.userId, userId),
@@ -128,8 +113,8 @@ export async function getUserActiveSessions(userId: string) {
       ipAddress: true,
       createdAt: true,
       expiresAt: true,
-      revokedAt: true,
-    },
+      revokedAt: true
+    }
   });
-  return rows.filter((s) => s.revokedAt === null && s.expiresAt > now);
+  return rows.filter((s) => {return s.revokedAt === null && s.expiresAt > now;});
 }

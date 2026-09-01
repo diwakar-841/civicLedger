@@ -1,16 +1,7 @@
 import { env } from "../config/env";
 import { logger } from "./logger";
 
-/**
- * Sends the phone-verification code through Twilio. In development, missing
- * SMS credentials intentionally fall back to the server log so the flow can
- * be exercised locally without exposing a secret in the frontend.
- *
- * Returns whether a real SMS was actually dispatched. Callers use this to
- * decide whether it's safe to also hand the OTP back to the client (dev-only
- * convenience so testers aren't stuck when no SMS provider is configured).
- */
-export async function sendPhoneVerificationOtp(to: string, otp: string): Promise<{ delivered: boolean }> {
+export async function sendPhoneVerificationOtp(to, otp) {
   const { TWILIO_ACCOUNT_SID: accountSid, TWILIO_AUTH_TOKEN: authToken, TWILIO_FROM_NUMBER: from } = env;
 
   if (!accountSid || !authToken || !from) {
@@ -19,7 +10,7 @@ export async function sendPhoneVerificationOtp(to: string, otp: string): Promise
     }
     logger.info("Dev SMS (would be sent in production)", {
       to,
-      message: `Your Civic Ledger phone verification code is ${otp}. It expires in 10 minutes.`,
+      message: `Your Civic Ledger phone verification code is ${otp}. It expires in 10 minutes.`
     });
     return { delivered: false };
   }
@@ -27,7 +18,7 @@ export async function sendPhoneVerificationOtp(to: string, otp: string): Promise
   const body = new URLSearchParams({
     To: to,
     From: from,
-    Body: `Your Civic Ledger phone verification code is ${otp}. It expires in 10 minutes. Do not share it.`,
+    Body: `Your Civic Ledger phone verification code is ${otp}. It expires in 10 minutes. Do not share it.`
   });
 
   const response = await fetch(
@@ -36,14 +27,14 @@ export async function sendPhoneVerificationOtp(to: string, otp: string): Promise
       method: "POST",
       headers: {
         Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`,
-        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Type": "application/x-www-form-urlencoded"
       },
-      body,
+      body
     }
   );
 
   if (!response.ok) {
-    const detail = await response.text().catch(() => "");
+    const detail = await response.text().catch(() => {return "";});
     throw new Error(`Twilio SMS request failed (${response.status}): ${detail.slice(0, 300)}`);
   }
 

@@ -16,8 +16,9 @@ import {
   resendVerificationByEmail,
   forgotPassword,
   resetPassword,
-  verifySessionLoginPin,
-} from "../services/auth.service";
+  verifySessionLoginPin 
+} from
+"../services/auth.service";
 import {
   generateTotpSecret,
   generateTotpQrCode,
@@ -25,15 +26,17 @@ import {
   decryptSecret,
   verifyTotpCode,
   generateRecoveryCodes,
-  verifyRecoveryCode,
-} from "../services/totp.service";
+  verifyRecoveryCode 
+} from
+"../services/totp.service";
 import {
   rotateSession,
   revokeSessionByToken,
   revokeAllUserSessions,
   getUserActiveSessions,
-  revokeSessionById,
-} from "../services/session.service";
+  revokeSessionById 
+} from
+"../services/session.service";
 import { db, users } from "@voting/database";
 import { eq } from "drizzle-orm";
 import { env } from "../config/env";
@@ -41,9 +44,7 @@ import { BadRequestError, NotFoundError, UnauthorizedError } from "../lib/errors
 import { recordAudit } from "../lib/audit";
 import { setRefreshCookie, clearRefreshCookie } from "../lib/cookies";
 
-// ── Registration ──────────────────────────────────────────────────────────────
-
-export async function registerInitiate(req: Request, res: Response, next: NextFunction) {
+export async function registerInitiate(req, res, next) {
   try {
     const result = await initiateRegistration(req.body, req.ip);
     res.status(201).json(result);
@@ -52,20 +53,20 @@ export async function registerInitiate(req: Request, res: Response, next: NextFu
   }
 }
 
-export async function registerSetPassword(req: Request, res: Response, next: NextFunction) {
+export async function registerSetPassword(req, res, next) {
   try {
     const { setPasswordToken, password } = req.body;
     const { voterId } = await setRegistrationPassword(setPasswordToken, password, req.ip);
     res.json({
       message: "Password created successfully. Sign in to verify your phone and finish registration.",
-      voterId,
+      voterId
     });
   } catch (err) {
     next(err);
   }
 }
 
-export async function registerVerifyOtp(req: Request, res: Response, next: NextFunction) {
+export async function registerVerifyOtp(req, res, next) {
   try {
     res.json(await verifyRegistrationOtp(req.body.email, req.body.otp));
   } catch (err) {
@@ -73,9 +74,7 @@ export async function registerVerifyOtp(req: Request, res: Response, next: NextF
   }
 }
 
-// ── Login ─────────────────────────────────────────────────────────────────────
-
-export async function login(req: Request, res: Response, next: NextFunction) {
+export async function login(req, res, next) {
   try {
     const { email, password } = req.body;
     const result = await loginUser(email, password, req.ip, req.headers["user-agent"]);
@@ -90,7 +89,7 @@ export async function login(req: Request, res: Response, next: NextFunction) {
   }
 }
 
-export async function login2faHandler(req: Request, res: Response, next: NextFunction) {
+export async function login2faHandler(req, res, next) {
   try {
     const { challengeToken, code } = req.body;
     const result = await login2fa(challengeToken, code, req.ip, req.headers["user-agent"]);
@@ -100,81 +99,50 @@ export async function login2faHandler(req: Request, res: Response, next: NextFun
   }
 }
 
-/**
- * POST /auth/login-pin
- * Body: { loginToken, pin }
- *
- * Alternative to biometric login for users who have a login PIN set.
- * loginToken is the same short-lived JWT issued when biometricLoginRequired.
- *
- * FIX: now sets the httpOnly refreshToken cookie so token refresh works.
- * Previously the rawToken from createSession was discarded by loginWithPin,
- * making silent token refresh impossible and causing "Missing authorization
- * token" errors once the 15-minute access token expired.
- */
-export async function loginPinHandler(req: Request, res: Response, next: NextFunction) {
+export async function loginPinHandler(req, res, next) {
   try {
     const { loginToken, pin } = req.body;
     const result = await loginWithPin(loginToken, pin, req.ip, req.headers["user-agent"]);
-    // Set the httpOnly refresh cookie so subsequent /auth/refresh calls work
+
     setRefreshCookie(res, result.rawToken);
-    // Only expose accessToken + user to the client — never expose rawToken
+
     res.json({ accessToken: result.accessToken, user: result.user });
   } catch (err) {
     next(err);
   }
 }
 
-/**
- * POST /auth/pins/setup  (requires Bearer session token)
- * Body: { loginPin, votingPin }
- *
- * Called once after biometric registration to store the user's two PINs.
- */
-export async function setupPinsHandler(req: AuthedRequest, res: Response, next: NextFunction) {
+export async function setupPinsHandler(req, res, next) {
   try {
     const { loginPin, votingPin } = req.body;
-    await setupPins(req.user!.userId, loginPin, votingPin, req.ip);
+    await setupPins(req.user.userId, loginPin, votingPin, req.ip);
     res.json({ message: "PINs set up successfully." });
   } catch (err) {
     next(err);
   }
 }
 
-export async function me(req: AuthedRequest, res: Response, next: NextFunction) {
+export async function me(req, res, next) {
   try {
-    res.json(await getCurrentUser(req.user!.userId));
+    res.json(await getCurrentUser(req.user.userId));
   } catch (err) {
     next(err);
   }
 }
 
-// ── Session management ────────────────────────────────────────────────────────
-
-/**
- * POST /auth/refresh
- *
- * FIX: corrected rotateSession call signature (was passing positional args
- * instead of an options object), fixed destructuring (rotateSession returns
- * { rawToken, sessionId, userId } — not { accessToken, rawRefreshToken }),
- * and added a DB lookup to obtain the user's role for signing a new access
- * token. Without these fixes the refresh endpoint always returned
- * { accessToken: undefined }, causing every subsequent API call to fail with
- * "Missing authorization token".
- */
-export async function refresh(req: Request, res: Response, next: NextFunction) {
+export async function refresh(req, res, next) {
   try {
     const rawToken = req.cookies?.refreshToken;
-    if (!rawToken) throw new UnauthorizedError("No refresh token");
+    if (!rawToken) {throw new UnauthorizedError("No refresh token");}
 
     const session = await rotateSession(rawToken, {
-      userAgent: req.headers["user-agent"] as string | undefined,
-      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"],
+      ipAddress: req.ip
     });
-    if (!session) throw new UnauthorizedError("Invalid or expired refresh token");
+    if (!session) {throw new UnauthorizedError("Invalid or expired refresh token");}
 
     const user = await db.query.users.findFirst({ where: eq(users.id, session.userId) });
-    if (!user) throw new UnauthorizedError("User not found");
+    if (!user) {throw new UnauthorizedError("User not found");}
 
     const accessToken = jwt.sign(
       { userId: user.id, role: user.role },
@@ -189,10 +157,10 @@ export async function refresh(req: Request, res: Response, next: NextFunction) {
   }
 }
 
-export async function logout(req: Request, res: Response, next: NextFunction) {
+export async function logout(req, res, next) {
   try {
     const rawToken = req.cookies?.refreshToken;
-    if (rawToken) await revokeSessionByToken(rawToken).catch(() => {});
+    if (rawToken) {await revokeSessionByToken(rawToken).catch(() => {});}
     clearRefreshCookie(res);
     res.json({ message: "Logged out" });
   } catch (err) {
@@ -200,9 +168,9 @@ export async function logout(req: Request, res: Response, next: NextFunction) {
   }
 }
 
-export async function logoutAll(req: AuthedRequest, res: Response, next: NextFunction) {
+export async function logoutAll(req, res, next) {
   try {
-    await revokeAllUserSessions(req.user!.userId);
+    await revokeAllUserSessions(req.user.userId);
     clearRefreshCookie(res);
     res.json({ message: "All sessions revoked" });
   } catch (err) {
@@ -210,31 +178,29 @@ export async function logoutAll(req: AuthedRequest, res: Response, next: NextFun
   }
 }
 
-export async function listSessions(req: AuthedRequest, res: Response, next: NextFunction) {
+export async function listSessions(req, res, next) {
   try {
-    const sessions = await getUserActiveSessions(req.user!.userId);
+    const sessions = await getUserActiveSessions(req.user.userId);
     res.json(sessions);
   } catch (err) {
     next(err);
   }
 }
 
-export async function revokeSession(req: AuthedRequest, res: Response, next: NextFunction) {
+export async function revokeSession(req, res, next) {
   try {
-    await revokeSessionById(req.user!.userId, req.params.id);
+    await revokeSessionById(req.user.userId, req.params.id);
     res.json({ message: "Session revoked" });
   } catch (err) {
     next(err);
   }
 }
 
-// ── 2FA (TOTP) ────────────────────────────────────────────────────────────────
-
-export async function setup2fa(req: AuthedRequest, res: Response, next: NextFunction) {
+export async function setup2fa(req, res, next) {
   try {
-    const user = await db.query.users.findFirst({ where: eq(users.id, req.user!.userId) });
-    if (!user) throw new NotFoundError("User not found");
-    if (user.isTwoFactorEnabled) throw new BadRequestError("2FA is already enabled");
+    const user = await db.query.users.findFirst({ where: eq(users.id, req.user.userId) });
+    if (!user) {throw new NotFoundError("User not found");}
+    if (user.isTwoFactorEnabled) {throw new BadRequestError("2FA is already enabled");}
 
     const secret = generateTotpSecret();
     const qrCodeDataUrl = await generateTotpQrCode(secret, user.email);
@@ -247,25 +213,22 @@ export async function setup2fa(req: AuthedRequest, res: Response, next: NextFunc
   }
 }
 
-export async function enable2fa(req: AuthedRequest, res: Response, next: NextFunction) {
+export async function enable2fa(req, res, next) {
   try {
     const { code } = req.body;
-    const user = await db.query.users.findFirst({ where: eq(users.id, req.user!.userId) });
-    if (!user || !user.twoFactorSecretEncrypted) throw new BadRequestError("2FA setup not initiated");
+    const user = await db.query.users.findFirst({ where: eq(users.id, req.user.userId) });
+    if (!user || !user.twoFactorSecretEncrypted) {throw new BadRequestError("2FA setup not initiated");}
 
     const secret = decryptSecret(user.twoFactorSecretEncrypted);
     const valid = await verifyTotpCode(secret, code.trim());
-    if (!valid) throw new UnauthorizedError("Invalid TOTP code");
+    if (!valid) {throw new UnauthorizedError("Invalid TOTP code");}
 
-    // FIX: generateRecoveryCodes() returns { plain, hashes } — destructure correctly.
-    // The hashes are SHA-256 digests (computed inside generateRecoveryCodes); store
-    // those in the DB.  Return the plaintext codes to the user once.
     const { plain: recoveryCodes, hashes: codesHash } = generateRecoveryCodes();
 
-    await db
-      .update(users)
-      .set({ isTwoFactorEnabled: true, twoFactorRecoveryCodesHash: JSON.stringify(codesHash) as any })
-      .where(eq(users.id, user.id));
+    await db.
+    update(users).
+    set({ isTwoFactorEnabled: true, twoFactorRecoveryCodesHash: JSON.stringify(codesHash) }).
+    where(eq(users.id, user.id));
 
     recordAudit(user.id, "2FA_ENABLED").catch(() => {});
     res.json({ recoveryCodes });
@@ -274,22 +237,22 @@ export async function enable2fa(req: AuthedRequest, res: Response, next: NextFun
   }
 }
 
-export async function disable2fa(req: AuthedRequest, res: Response, next: NextFunction) {
+export async function disable2fa(req, res, next) {
   try {
     const { code } = req.body;
-    const user = await db.query.users.findFirst({ where: eq(users.id, req.user!.userId) });
+    const user = await db.query.users.findFirst({ where: eq(users.id, req.user.userId) });
     if (!user || !user.twoFactorSecretEncrypted || !user.isTwoFactorEnabled) {
       throw new BadRequestError("2FA is not enabled");
     }
 
     const secret = decryptSecret(user.twoFactorSecretEncrypted);
     const valid = await verifyTotpCode(secret, code.trim());
-    if (!valid) throw new UnauthorizedError("Invalid TOTP code");
+    if (!valid) {throw new UnauthorizedError("Invalid TOTP code");}
 
-    await db
-      .update(users)
-      .set({ isTwoFactorEnabled: false, twoFactorSecretEncrypted: null, twoFactorRecoveryCodesHash: null })
-      .where(eq(users.id, user.id));
+    await db.
+    update(users).
+    set({ isTwoFactorEnabled: false, twoFactorSecretEncrypted: null, twoFactorRecoveryCodesHash: null }).
+    where(eq(users.id, user.id));
 
     recordAudit(user.id, "2FA_DISABLED").catch(() => {});
     res.json({ message: "2FA disabled" });
@@ -298,9 +261,7 @@ export async function disable2fa(req: AuthedRequest, res: Response, next: NextFu
   }
 }
 
-// ── Email verification ─────────────────────────────────────────────────────────
-
-export async function verifyEmailHandler(req: Request, res: Response, next: NextFunction) {
+export async function verifyEmailHandler(req, res, next) {
   try {
     const { token } = req.params;
     const result = await verifyEmail(token);
@@ -310,16 +271,16 @@ export async function verifyEmailHandler(req: Request, res: Response, next: Next
   }
 }
 
-export async function resendVerificationHandler(req: AuthedRequest, res: Response, next: NextFunction) {
+export async function resendVerificationHandler(req, res, next) {
   try {
-    await resendVerification(req.user!.userId, req.ip);
+    await resendVerification(req.user.userId, req.ip);
     res.json({ message: "Verification email sent" });
   } catch (err) {
     next(err);
   }
 }
 
-export async function resendVerificationPublicHandler(req: Request, res: Response, next: NextFunction) {
+export async function resendVerificationPublicHandler(req, res, next) {
   try {
     await resendVerificationByEmail(req.body.email, req.body.method, req.ip);
     res.json({ message: "If that email is registered and unverified, a new verification message has been sent." });
@@ -328,9 +289,7 @@ export async function resendVerificationPublicHandler(req: Request, res: Respons
   }
 }
 
-// ── Password reset ─────────────────────────────────────────────────────────────
-
-export async function forgotPasswordHandler(req: Request, res: Response, next: NextFunction) {
+export async function forgotPasswordHandler(req, res, next) {
   try {
     await forgotPassword(req.body.email, req.ip);
     res.json({ message: "If an account with that email exists, a password reset link has been sent." });
@@ -339,7 +298,7 @@ export async function forgotPasswordHandler(req: Request, res: Response, next: N
   }
 }
 
-export async function resetPasswordHandler(req: Request, res: Response, next: NextFunction) {
+export async function resetPasswordHandler(req, res, next) {
   try {
     const { token, password } = req.body;
     await resetPassword(token, password, req.ip);
@@ -349,20 +308,10 @@ export async function resetPasswordHandler(req: Request, res: Response, next: Ne
   }
 }
 
-// ── Admin step-up via Login PIN (authenticated session) ───────────────────────
-
-/**
- * POST /auth/session-pin
- * Body: { pin }
- * Requires: Bearer session token (requireAuth)
- *
- * Verifies the caller's Login PIN without needing a loginToken.
- * Used by the admin action confirmation modal as a biometric alternative.
- */
-export async function sessionPinHandler(req: AuthedRequest, res: Response, next: NextFunction) {
+export async function sessionPinHandler(req, res, next) {
   try {
     const { pin } = req.body;
-    await verifySessionLoginPin(req.user!.userId, pin);
+    await verifySessionLoginPin(req.user.userId, pin);
     res.json({ ok: true });
   } catch (err) {
     next(err);

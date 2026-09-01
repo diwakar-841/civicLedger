@@ -4,19 +4,11 @@ import { logger } from "../lib/logger";
 import { AppError } from "../lib/errors";
 import { env } from "../config/env";
 
-export function notFoundHandler(req: Request, res: Response) {
+export function notFoundHandler(req, res) {
   res.status(404).json({ error: `Route ${req.method} ${req.path} not found` });
 }
 
-/**
- * Centralized error handling. Previous version always responded 400 and
- * echoed `err.message` verbatim to the client for every error, including
- * unexpected DB/RPC failures - which can leak connection strings, SQL
- * fragments, or internal file paths. Now: known operational errors (AppError)
- * return their safe message and correct status; anything else is logged in
- * full server-side and only a generic message crosses the wire in production.
- */
-export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction) {
+export function errorHandler(err, req, res, _next) {
   if (err instanceof ZodError) {
     logger.warn("Validation error", { path: req.path });
     return res.status(400).json({ error: "Validation failed", details: err.flatten() });
@@ -34,7 +26,5 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   const message = err instanceof Error ? err.message : "Unknown error";
   logger.error(message, { path: req.path, stack: err instanceof Error ? err.stack : undefined });
 
-  return res.status(500).json({
-    error: env.NODE_ENV === "production" ? "Something went wrong. Please try again." : message,
-  });
+  return res.status(500).json({ error: env.NODE_ENV === "production" ? "Something went wrong. Please try again." : message });
 }

@@ -37,80 +37,83 @@ import { AdminGroupDetailPage } from "./pages/admin/AdminGroupDetailPage";
 import { AdminGroupMembersPage } from "./pages/admin/AdminGroupMembersPage";
 import { AdminGroupsPage } from "./pages/admin/AdminGroupsPage";
 import { AdminElectionsPage } from "./pages/admin/AdminElectionsPage";
-import { NotFoundPage } from "./pages/NotFoundPage";
-
-// WalletProvider removed — wallets are now managed server-side.
-// No external wallet app (OKX, MetaMask) is needed.
+import { NotFoundPage } from "./pages/NotFoundPage";import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
 
 function RootRedirect() {
   const { isAuthenticated, isAdmin, isLoading } = useAuthContext();
-  if (isLoading) return null;
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
-  return <Navigate to={isAdmin ? "/admin" : "/home"} replace />;
+  if (isLoading) {return null;}
+  if (!isAuthenticated) {return _jsxDEV(Navigate, { to: "/login", replace: true }, void 0, false);}
+  return _jsxDEV(Navigate, { to: isAdmin ? "/admin" : "/home", replace: true }, void 0, false);
 }
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <ToastProvider>
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<RootRedirect />} />
+    _jsxDEV(ThemeProvider, {
+ children:
+      _jsxDEV(AuthProvider, {
+ children:
+        _jsxDEV(ToastProvider, {
+ children:
+          _jsxDEV(BrowserRouter, {
+ children:
+            _jsxDEV(Routes, {
+ children: [
+              _jsxDEV(Route, { path: "/", element: _jsxDEV(RootRedirect, {}, void 0, false) }, void 0, false),
 
-              {/* Public auth routes */}
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route path="/register/complete" element={<RegisterCompletePage />} />
-              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-              <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
-              <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
+              _jsxDEV(Route, { path: "/login", element: _jsxDEV(LoginPage, {}, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/register", element: _jsxDEV(RegisterPage, {}, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/register/complete", element: _jsxDEV(RegisterCompletePage, {}, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/forgot-password", element: _jsxDEV(ForgotPasswordPage, {}, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/reset-password/:token", element: _jsxDEV(ResetPasswordPage, {}, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/verify-email/:token", element: _jsxDEV(VerifyEmailPage, {}, void 0, false) }, void 0, false),
 
-              {/* KYC + biometric setup */}
-              <Route path="/kyc" element={<KycWizardPage />} />
-              <Route path="/biometric-setup" element={<BiometricSetupPage />} />
+              _jsxDEV(Route, { path: "/kyc", element: _jsxDEV(KycWizardPage, {}, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/biometric-setup", element: _jsxDEV(BiometricSetupPage, {}, void 0, false) }, void 0, false),
 
-              {/* PIN setup */}
-              <Route path="/pin-setup" element={<ProtectedRoute><PinSetupPage /></ProtectedRoute>} />
+              _jsxDEV(Route, { path: "/pin-setup", element: _jsxDEV(ProtectedRoute, { children: _jsxDEV(PinSetupPage, {}, void 0, false) }, void 0, false) }, void 0, false),
 
-              {/* Protected voter routes */}
-              <Route path="/home" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
-              <Route path="/elections" element={<ProtectedRoute><ElectionListPage /></ProtectedRoute>} />
-              <Route path="/elections/:id" element={<ProtectedRoute><BallotPage /></ProtectedRoute>} />
-              <Route path="/elections/:id/confirmation" element={<ProtectedRoute><ConfirmationPage /></ProtectedRoute>} />
-              <Route path="/elections/:id/results" element={<ProtectedRoute><ResultsPage /></ProtectedRoute>} />
-              <Route path="/my-elections" element={<ProtectedRoute><MyElectionsPage /></ProtectedRoute>} />
+              _jsxDEV(Route, { path: "/home", element: _jsxDEV(ProtectedRoute, { children: _jsxDEV(HomePage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/elections", element: _jsxDEV(ProtectedRoute, { children: _jsxDEV(ElectionListPage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/elections/:id", element: _jsxDEV(ProtectedRoute, { children: _jsxDEV(BallotPage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/elections/:id/confirmation", element: _jsxDEV(ProtectedRoute, { children: _jsxDEV(ConfirmationPage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/elections/:id/results", element: _jsxDEV(ProtectedRoute, { children: _jsxDEV(ResultsPage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/my-elections", element: _jsxDEV(ProtectedRoute, { children: _jsxDEV(MyElectionsPage, {}, void 0, false) }, void 0, false) }, void 0, false),
 
-              <Route path="/settings/security" element={<ProtectedRoute><SecuritySettingsPage /></ProtectedRoute>} />
-              <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-              <Route path="/requests" element={<ProtectedRoute><RequestsPage /></ProtectedRoute>} />
-              <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
-              <Route path="/groups" element={<ProtectedRoute><GroupsPage /></ProtectedRoute>} />
-              <Route path="/groups/:id" element={<ProtectedRoute><GroupDetailPage /></ProtectedRoute>} />
-              <Route
-                path="/candidate-profile/:requestId"
-                element={<ProtectedRoute><CandidateProfileCompletionPage /></ProtectedRoute>}
-              />
+              _jsxDEV(Route, { path: "/settings/security", element: _jsxDEV(ProtectedRoute, { children: _jsxDEV(SecuritySettingsPage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/profile", element: _jsxDEV(ProtectedRoute, { children: _jsxDEV(ProfilePage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/requests", element: _jsxDEV(ProtectedRoute, { children: _jsxDEV(RequestsPage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/notifications", element: _jsxDEV(ProtectedRoute, { children: _jsxDEV(NotificationsPage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/groups", element: _jsxDEV(ProtectedRoute, { children: _jsxDEV(GroupsPage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/groups/:id", element: _jsxDEV(ProtectedRoute, { children: _jsxDEV(GroupDetailPage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, {
+                path: "/candidate-profile/:requestId",
+                element: _jsxDEV(ProtectedRoute, { children: _jsxDEV(CandidateProfileCompletionPage, {}, void 0, false) }, void 0, false) 
+}, void 0, false
+              ),
 
-              {/* Admin routes */}
-              <Route path="/admin/require-2fa" element={<ProtectedRoute><AdminRequire2FAPage /></ProtectedRoute>} />
-              <Route path="/admin" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
-              <Route path="/admin/groups" element={<AdminRoute><AdminGroupsPage /></AdminRoute>} />
-              <Route path="/admin/elections" element={<AdminRoute><AdminElectionsPage /></AdminRoute>} />
-              <Route path="/admin/elections/new" element={<AdminRoute><CreateElectionPage /></AdminRoute>} />
-              <Route path="/admin/groups/new" element={<AdminRoute><CreateGroupPage /></AdminRoute>} />
-              <Route path="/admin/groups/:id" element={<AdminRoute><AdminGroupDetailPage /></AdminRoute>} />
-              <Route path="/admin/groups/:id/members" element={<AdminRoute><AdminGroupMembersPage /></AdminRoute>} />
-              <Route path="/admin/elections/:id/status" element={<AdminRoute><ElectionStatusPage /></AdminRoute>} />
-              <Route path="/admin/elections/:id/candidates" element={<AdminRoute><ManageCandidatesPage /></AdminRoute>} />
-              <Route path="/admin/elections/:id/analytics" element={<AdminRoute><AdminAnalyticsPage /></AdminRoute>} />
-              <Route path="/admin/audit-log" element={<AdminRoute><AuditLogPage /></AdminRoute>} />
+              _jsxDEV(Route, { path: "/admin/require-2fa", element: _jsxDEV(ProtectedRoute, { children: _jsxDEV(AdminRequire2FAPage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/admin", element: _jsxDEV(AdminRoute, { children: _jsxDEV(AdminDashboardPage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/admin/groups", element: _jsxDEV(AdminRoute, { children: _jsxDEV(AdminGroupsPage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/admin/elections", element: _jsxDEV(AdminRoute, { children: _jsxDEV(AdminElectionsPage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/admin/elections/new", element: _jsxDEV(AdminRoute, { children: _jsxDEV(CreateElectionPage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/admin/groups/new", element: _jsxDEV(AdminRoute, { children: _jsxDEV(CreateGroupPage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/admin/groups/:id", element: _jsxDEV(AdminRoute, { children: _jsxDEV(AdminGroupDetailPage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/admin/groups/:id/members", element: _jsxDEV(AdminRoute, { children: _jsxDEV(AdminGroupMembersPage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/admin/elections/:id/status", element: _jsxDEV(AdminRoute, { children: _jsxDEV(ElectionStatusPage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/admin/elections/:id/candidates", element: _jsxDEV(AdminRoute, { children: _jsxDEV(ManageCandidatesPage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/admin/elections/:id/analytics", element: _jsxDEV(AdminRoute, { children: _jsxDEV(AdminAnalyticsPage, {}, void 0, false) }, void 0, false) }, void 0, false),
+              _jsxDEV(Route, { path: "/admin/audit-log", element: _jsxDEV(AdminRoute, { children: _jsxDEV(AuditLogPage, {}, void 0, false) }, void 0, false) }, void 0, false),
 
-              <Route path="*" element={<NotFoundPage />} />
-            </Routes>
-          </BrowserRouter>
-        </ToastProvider>
-      </AuthProvider>
-    </ThemeProvider>
-  );
+              _jsxDEV(Route, { path: "*", element: _jsxDEV(NotFoundPage, {}, void 0, false) }, void 0, false)] 
+}, void 0, true
+            ) 
+}, void 0, false
+          ) 
+}, void 0, false
+        ) 
+}, void 0, false
+      ) 
+}, void 0, false
+    ));
+
 }

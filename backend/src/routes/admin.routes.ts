@@ -10,44 +10,40 @@ import draftElectionRoutes from "./admin.draftElections.routes";
 
 const router = Router();
 
-// All admin routes require auth + admin role + 2FA enabled
 router.use(requireAuth, requireAdmin, requireTwoFactor);
 
-// Get all elections for admin dashboard (with candidate count and accepted nomination count)
 router.get("/elections", async (req, res) => {
   try {
-    const allElections = await db
-      .select({
-        id: elections.id,
-        title: elections.title,
-        description: elections.description,
-        startTime: elections.startTime,
-        endTime: elections.endTime,
-        nominationDeadline: elections.nominationDeadline,
-        isHidden: elections.isHidden,
-        candidateCount: countDistinct(candidates.id),
-      })
-      .from(elections)
-      .leftJoin(candidates, eq(elections.id, candidates.electionId))
-      .groupBy(
-        elections.id,
-        elections.title,
-        elections.description,
-        elections.startTime,
-        elections.endTime,
-        elections.nominationDeadline,
-        elections.isHidden,
-      )
-      .orderBy(desc(elections.startTime));
+    const allElections = await db.
+    select({
+      id: elections.id,
+      title: elections.title,
+      description: elections.description,
+      startTime: elections.startTime,
+      endTime: elections.endTime,
+      nominationDeadline: elections.nominationDeadline,
+      isHidden: elections.isHidden,
+      candidateCount: countDistinct(candidates.id)
+    }).
+    from(elections).
+    leftJoin(candidates, eq(elections.id, candidates.electionId)).
+    groupBy(
+      elections.id,
+      elections.title,
+      elections.description,
+      elections.startTime,
+      elections.endTime,
+      elections.nominationDeadline,
+      elections.isHidden
+    ).
+    orderBy(desc(elections.startTime));
 
     res.json(allElections);
-  } catch (error: any) {
+  } catch (error) {
     res.status(500).json({ message: "Failed to load elections" });
   }
 });
 
-// Sub-router: draft election management (extend deadline, resend, close, etc.)
-// Mounted at /elections so paths become /admin/elections/draft, /admin/elections/:id/...
 router.use("/elections", draftElectionRoutes);
 
 router.get("/audit-log", getAuditLog);

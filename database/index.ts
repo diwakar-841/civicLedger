@@ -24,8 +24,8 @@ export const db = drizzle(pool, {
     ...webauthnCredentials,
     ...notifications,
     ...candidateRequests,
-    ...groups,
-  },
+    ...groups
+  }
 });
 
 export * from "./schema/users";

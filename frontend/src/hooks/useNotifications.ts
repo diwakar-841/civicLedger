@@ -1,31 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiClient } from "../lib/apiClient";
 
-export interface Notification {
-  id: string;
-  type: string;
-  title: string;
-  message: string;
-  isRead: boolean;
-  relatedId?: string | null;
-  metadata?: Record<string, unknown> | null;
-  createdAt: string;
-}
-
 export function useNotifications() {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(null);
 
   const fetchNotifications = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get<Notification[]>("/notifications");
+      const response = await apiClient.get("/notifications");
       const data = Array.isArray(response.data) ? response.data : [];
       setNotifications(data);
       setError(null);
-    } catch (err: any) {
-      // Silently fail - notifications are optional, don't break the app
+    } catch (err) {
+
       console.error("[v0] Notifications load failed (non-critical):", err?.message);
       setNotifications([]);
       setError(null);
@@ -34,24 +23,22 @@ export function useNotifications() {
     }
   }, []);
 
-  // Fetch notifications on mount and set up polling
   useEffect(() => {
     fetchNotifications();
 
-    // Poll for new notifications every 30 seconds
     const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
+    return () => {return clearInterval(interval);};
   }, [fetchNotifications]);
 
-  const markAsRead = async (notificationId: string) => {
+  const markAsRead = async (notificationId) => {
     try {
       await apiClient.patch(`/notifications/${notificationId}/read`);
       setNotifications((prev) =>
-        prev.map((n) =>
-          n.id === notificationId ? { ...n, isRead: true } : n
-        )
+      {return prev.map((n) =>
+        {return n.id === notificationId ? { ...n, isRead: true } : n;}
+        );}
       );
-    } catch (err: any) {
+    } catch (err) {
       console.error("[v0] Error marking notification as read:", err?.message);
     }
   };
@@ -59,17 +46,17 @@ export function useNotifications() {
   const markAllAsRead = async () => {
     try {
       await apiClient.patch("/notifications/read-all");
-      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-    } catch (err: any) {
+      setNotifications((prev) => {return prev.map((n) => {return { ...n, isRead: true };});});
+    } catch (err) {
       console.error("[v0] Error marking all as read:", err?.message);
     }
   };
 
-  const deleteNotification = async (notificationId: string) => {
+  const deleteNotification = async (notificationId) => {
     try {
       await apiClient.delete(`/notifications/${notificationId}`);
-      setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
-    } catch (err: any) {
+      setNotifications((prev) => {return prev.filter((n) => {return n.id !== notificationId;});});
+    } catch (err) {
       console.error("[v0] Error deleting notification:", err?.message);
     }
   };
@@ -81,7 +68,7 @@ export function useNotifications() {
     markAsRead,
     markAllAsRead,
     deleteNotification,
-    /** Manually re-fetch notifications (e.g. after an admin action). */
-    refetch: fetchNotifications,
+
+    refetch: fetchNotifications
   };
 }

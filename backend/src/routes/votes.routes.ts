@@ -10,17 +10,13 @@ const router = Router();
 const voteSchema = z.object({
   electionId: z.string().uuid("Invalid election id"),
   candidateId: z.string().uuid("Invalid candidate id"),
-  voteToken: z.string().min(1, "A vote token is required — authenticate with your PIN or biometric first"),
+  voteToken: z.string().min(1, "A vote token is required — authenticate with your PIN or biometric first")
 });
 
-const electionIdParamSchema = z.object({
-  electionId: z.string().uuid("Invalid election id"),
-});
+const electionIdParamSchema = z.object({ electionId: z.string().uuid("Invalid election id") });
 
 router.get("/contract-info", requireAuth, contractInfo);
 
-// Check if the current user has already voted in a given election.
-// Returns { hasVoted: false } or { hasVoted: true, vote: { candidateId, candidateName, txHash, ... } }
 router.get(
   "/my-vote/:electionId",
   requireAuth,
