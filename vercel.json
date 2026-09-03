@@ -2,12 +2,9 @@
   "buildCommand": "cd frontend && npm run build",
   "outputDirectory": "frontend/dist",
   "devCommand": "cd frontend && npm run dev",
-  "env": {
-    "VITE_API_URL": "@vite_api_url"
-  },
   "headers": [
     {
-      "source": "/dist/(.*)",
+      "source": "/assets/(.*)",
       "headers": [
         {
           "key": "Cache-Control",
