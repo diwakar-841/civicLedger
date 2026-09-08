@@ -102,7 +102,7 @@ frontend/src/
 ### 1. Clone the repository
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/diwakar-841/Civic-Ledger
 cd PROJECT-2
 ```
 
