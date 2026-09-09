@@ -38,8 +38,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // The default apiClient timeout is 30s, which is meant for user-triggered
+    // actions. On first load that timeout would leave the whole app stuck
+    // behind a loading screen for up to 30s whenever the backend is slow to
+    // respond (e.g. a cold start on the API host). Cap this specific check
+    // to a much shorter window so the UI reliably unblocks and falls back to
+    // the login page instead of hanging.
+    const controller = new AbortController();
+    const fastTimeout = setTimeout(() => controller.abort(), 6_000);
+
     apiClient
-      .get<User>("/auth/me")
+      .get<User>("/auth/me", { signal: controller.signal })
       .then(({ data }) => {
         setToken(getAccessToken());
         setUser(data);
@@ -49,7 +58,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(null);
         setUser(null);
       })
-      .finally(() => setIsLoading(false));
+      .finally(() => {
+        clearTimeout(fastTimeout);
+        setIsLoading(false);
+      });
+
+    return () => {
+      clearTimeout(fastTimeout);
+      controller.abort();
+    };
   }, []);
 
   function login(nextUser: User, nextToken: string) {

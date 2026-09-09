@@ -51,7 +51,7 @@ const NotFoundPage = lazy(() => import("./pages/NotFoundPage").then(m => ({ defa
 
 function RootRedirect() {
   const { isAuthenticated, isAdmin, isLoading } = useAuthContext();
-  if (isLoading) return null;
+  if (isLoading) return <PageLoader />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   return <Navigate to={isAdmin ? "/admin" : "/home"} replace />;
 }
