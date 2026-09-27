@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { logger } from "../lib/logger";
 import { candidateRequestService } from "../services/candidateRequest.service";
 import { notificationService } from "../services/notification.service";
 import { requireAuth, requireAdmin } from "../middlewares/auth.middleware";
@@ -155,7 +156,7 @@ router.post(
 
       res.status(201).json(request);
     } catch (error) {
-      console.error("[candidateRequests] Error creating request:", error);
+      logger.error("[candidateRequests] Error creating request:", { error: String(error) });
       res.status(500).json({ error: "Failed to create nomination request" });
     }
   },
@@ -285,7 +286,7 @@ async function acceptRequestHandler(req: Request, res: Response) {
     );
     res.json({ success: true, profileRequired: true });
   } catch (error) {
-    console.error("[candidateRequests] Error accepting request:", error);
+    logger.error("[candidateRequests] Error accepting request:", { error: String(error) });
     res.status(500).json({ error: "Failed to accept nomination" });
   }
 }
@@ -315,7 +316,7 @@ router.put("/:id/reject", requireAuth, async (req: Request, res: Response) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error("[candidateRequests] Error rejecting request:", error);
+    logger.error("[candidateRequests] Error rejecting request:", { error: String(error) });
     res.status(500).json({ error: "Failed to decline nomination" });
   }
 });
@@ -348,7 +349,7 @@ router.post(
 
       res.json({ success: true });
     } catch (error) {
-      console.error("[candidateRequests] Error rejecting request:", error);
+      logger.error("[candidateRequests] Error rejecting request:", { error: String(error) });
       res.status(500).json({ error: "Failed to decline nomination" });
     }
   },
@@ -363,7 +364,7 @@ router.get("/", requireAuth, async (req: Request, res: Response) => {
       : await candidateRequestService.getRequestsForUser(userId);
     res.json(requests);
   } catch (error) {
-    console.error("[candidateRequests] Error fetching user requests:", error);
+    logger.error("[candidateRequests] Error fetching user requests:", { error: String(error) });
     res.status(500).json({ error: "Failed to fetch requests" });
   }
 });
@@ -379,10 +380,7 @@ router.get(
         await candidateRequestService.getElectionRequests(electionId);
       res.json(requests);
     } catch (error) {
-      console.error(
-        "[candidateRequests] Error fetching election requests:",
-        error,
-      );
+      logger.error("[candidateRequests] Error fetching election requests:", { error: String(error) });
       res.status(500).json({ error: "Failed to fetch requests" });
     }
   },

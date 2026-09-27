@@ -14,7 +14,7 @@ import {
   sendRegistrationOtpEmail,
   sendVerificationEmail,
 } from "../lib/email";
-import { createSession } from "./session.service";
+import { createSession, revokeAllUserSessions } from "./session.service";
 import { recordAudit } from "../lib/audit";
 import { logger } from "../lib/logger";
 
@@ -42,6 +42,7 @@ function mapUser(user: typeof users.$inferSelect) {
     phoneVerified: user.phoneVerified,
     isTwoFactorEnabled: user.isTwoFactorEnabled,
     isBiometricRegistered: user.isBiometricRegistered,
+    hasVotingPin: Boolean(user.votingPinHash ?? user.pinHash),
     phone: user.phone,
     dob: user.dob,
     bio: user.bio,
@@ -174,7 +175,7 @@ export async function setRegistrationPassword(
 ): Promise<{ voterId: string }> {
   let payload: { userId: string; purpose: string };
   try {
-    payload = jwt.verify(setPasswordToken, env.JWT_SECRET) as typeof payload;
+    payload = jwt.verify(setPasswordToken, env.JWT_SECRET, { algorithms: ["HS256"] }) as typeof payload;
   } catch {
     throw new UnauthorizedError(
       "Link has expired — please restart registration or request a new email",
@@ -292,7 +293,7 @@ export async function loginWithPin(
 }> {
   let payload: { userId: string; purpose: string };
   try {
-    payload = jwt.verify(loginToken, env.JWT_SECRET) as typeof payload;
+    payload = jwt.verify(loginToken, env.JWT_SECRET, { algorithms: ["HS256"] }) as typeof payload;
   } catch {
     throw new UnauthorizedError("Login session expired — please sign in again");
   }
@@ -373,7 +374,7 @@ export async function login2fa(
 ) {
   let payload: { userId: string; purpose: string };
   try {
-    payload = jwt.verify(challengeToken, env.JWT_SECRET) as any;
+    payload = jwt.verify(challengeToken, env.JWT_SECRET, { algorithms: ["HS256"] }) as any;
   } catch {
     throw new UnauthorizedError("Challenge token expired or invalid");
   }
@@ -394,16 +395,14 @@ export async function login2fa(
   if (isRecovery) {
     if (!user.twoFactorRecoveryCodesHash)
       throw new UnauthorizedError("No recovery codes configured");
-    const codesHash: string[] = JSON.parse(
-      user.twoFactorRecoveryCodesHash as any,
-    );
+    const codesHash: string[] = user.twoFactorRecoveryCodesHash as any;
 
     const { valid, remaining } = verifyRecoveryCode(code.trim(), codesHash);
     if (!valid) throw new UnauthorizedError("Invalid recovery code");
 
     await db
       .update(users)
-      .set({ twoFactorRecoveryCodesHash: JSON.stringify(remaining) as any })
+      .set({ twoFactorRecoveryCodesHash: remaining as any })
       .where(eq(users.id, user.id));
   } else {
     const secret = decryptSecret(user.twoFactorSecretEncrypted);
@@ -425,12 +424,30 @@ export async function login2fa(
     return { biometricLoginRequired: true as const, loginToken };
   }
 
-  const kycToken = jwt.sign(
-    { userId: user.id, purpose: "kyc-1" },
+  if (!user.isVerified) {
+    const kycToken = jwt.sign(
+      { userId: user.id, purpose: "kyc-1" },
+      env.JWT_SECRET,
+      { expiresIn: "10m" },
+    );
+    return { kycRequired: true as const, kycToken };
+  }
+
+  // 2FA passed, no biometric step required, and the account is already
+  // verified — this must actually complete the login (previously this
+  // branch was missing entirely, so any verified user with 2FA enabled but
+  // no biometric registered could never finish signing in).
+  const { rawToken } = await createSession({
+    userId: user.id,
+    userAgent,
+    ipAddress,
+  });
+  const accessToken = jwt.sign(
+    { userId: user.id, role: user.role },
     env.JWT_SECRET,
-    { expiresIn: "10m" },
+    { expiresIn: "15m" },
   );
-  return { kycRequired: true as const, kycToken };
+  return { accessToken, user: mapUser(user), rawToken };
 }
 
 export async function getCurrentUser(userId: string) {
@@ -499,6 +516,11 @@ export async function resetPassword(
       passwordResetExpiresAt: null,
     })
     .where(eq(users.id, user.id));
+
+  // A password reset is exactly the moment an attacker's still-valid
+  // session (if there is one) should be killed — otherwise resetting the
+  // password does nothing to remove access someone else already has.
+  await revokeAllUserSessions(user.id);
 
   recordAudit(user.id, "PASSWORD_RESET", undefined, undefined, ipAddress).catch(
     () => {},

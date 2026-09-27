@@ -42,7 +42,9 @@ function passesVerhoeffChecksum(num: string): boolean {
  */
 
 export function isValidAadhaar(aadhaar: string): boolean {
-  return /^\d{12}$/.test(aadhaar);
+  if (!/^\d{12}$/.test(aadhaar)) return false;
+  if (aadhaar[0] === "0" || aadhaar[0] === "1") return false;
+  return passesVerhoeffChecksum(aadhaar);
 }
 
 export function hashAadhaar(aadhaarNumber: string): string {

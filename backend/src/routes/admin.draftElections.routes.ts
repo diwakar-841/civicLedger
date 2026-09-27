@@ -160,7 +160,7 @@ router.get("/draft", async (req: Request, res: Response) => {
 
     res.json(enriched);
   } catch (error) {
-    console.error("[admin] Error fetching draft elections:", error);
+    logger.error("[admin] Error fetching draft elections:", { error: String(error) });
     res.status(500).json({ error: "Failed to fetch draft elections" });
   }
 });
@@ -175,7 +175,7 @@ router.get(
       if (error?.statusCode === 404 || error?.name === "NotFoundError") {
         return res.status(404).json({ error: "Election not found" });
       }
-      console.error("[admin] Error loading nomination status:", error);
+      logger.error("[admin] Error loading nomination status:", { error: String(error) });
       res.status(500).json({ error: "Failed to load nomination status" });
     }
   },
@@ -226,7 +226,7 @@ router.get("/:electionId/status", async (req: Request, res: Response) => {
     if (error?.statusCode === 404 || error?.name === "NotFoundError") {
       return res.status(404).json({ error: "Election not found" });
     }
-    console.error("[admin] Error loading election status:", error);
+    logger.error("[admin] Error loading election status:", { error: String(error) });
     res.status(500).json({ error: "Failed to load election status" });
   }
 });
@@ -364,7 +364,7 @@ const extendAllowanceHandler = async (req: Request, res: Response) => {
       extendedFor: noResponseIds.length,
     });
   } catch (error) {
-    console.error("[admin] Error extending allowance:", error);
+    logger.error("[admin] Error extending allowance:", { error: String(error) });
     res.status(500).json({ error: "Failed to extend the allowance period" });
   }
 };
@@ -544,7 +544,7 @@ router.post(
 
       res.json({ success: true, election: { ...updated, ...withResults } });
     } catch (error) {
-      console.error("[admin] Error starting voting:", error);
+      logger.error("[admin] Error starting voting:", { error: String(error) });
       res.status(500).json({ error: "Failed to start voting" });
     }
   },
@@ -606,7 +606,7 @@ router.post(
       if (error?.statusCode) {
         return res.status(error.statusCode).json({ error: error.message });
       }
-      console.error("[admin] Error updating results settings:", error);
+      logger.error("[admin] Error updating results settings:", { error: String(error) });
       res.status(500).json({ error: "Failed to update results settings" });
     }
   },
@@ -686,7 +686,7 @@ router.post(
         remindersRemaining: 0,
       });
     } catch (error) {
-      console.error("[admin] Error sending nomination reminders:", error);
+      logger.error("[admin] Error sending nomination reminders:", { error: String(error) });
       res.status(500).json({ error: "Failed to send reminders" });
     }
   },
@@ -770,7 +770,7 @@ const cancelElectionHandler = async (req: Request, res: Response) => {
       status: "cancelled",
     });
   } catch (error) {
-    console.error("[admin] Error cancelling election:", error);
+    logger.error("[admin] Error cancelling election:", { error: String(error) });
     res.status(500).json({ error: "Failed to cancel the election" });
   }
 };
@@ -867,7 +867,7 @@ router.post(
         earliestVotingStart: earliestVotingStart(nominationDeadline),
       });
     } catch (error) {
-      console.error("[admin] Error setting nomination deadline:", error);
+      logger.error("[admin] Error setting nomination deadline:", { error: String(error) });
       res.status(500).json({ error: "Failed to set nomination deadline" });
     }
   },

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   ShieldCheck,
   Mail,
@@ -10,6 +10,7 @@ import {
   Copy,
   CheckCircle2,
   QrCode,
+  Fingerprint,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Layout } from "../../components/layout/Layout";
@@ -32,8 +33,10 @@ type TwoFAStep = "idle" | "setup" | "codes";
 export function SecuritySettingsPage() {
   const { user, refreshUser } = useAuthContext();
   const { show } = useToast();
+  const navigate = useNavigate();
 
   const [resending, setResending] = useState(false);
+  const [biometricLoading, setBiometricLoading] = useState(false);
 
   const [twoFAStep, setTwoFAStep] = useState<TwoFAStep>("idle");
   const [setupData, setSetupData] = useState<TwoFASetupResponse | null>(null);
@@ -108,6 +111,21 @@ export function SecuritySettingsPage() {
       show(formatError(err, "Invalid code. Please try again."), "error");
     } finally {
       setTwoFALoading(false);
+    }
+  }
+
+  async function handleEnableBiometric() {
+    setBiometricLoading(true);
+    try {
+      const { data } = await apiClient.post<{ setupToken: string }>(
+        "/auth/biometric/setup-token",
+      );
+      sessionStorage.setItem("setupToken", data.setupToken);
+      navigate("/biometric-setup");
+    } catch (err) {
+      show(formatError(err, "Could not start biometric setup"), "error");
+    } finally {
+      setBiometricLoading(false);
     }
   }
 
@@ -483,6 +501,46 @@ export function SecuritySettingsPage() {
                   )}
                 </AnimatePresence>
               </div>
+            </div>
+          </Card>
+        </motion.div>
+
+        {/* Biometric login */}
+        <motion.div
+          {...fadeIn}
+          transition={{ ...fadeIn.transition, delay: 0.1 }}
+        >
+          <Card className="mb-6 p-6 dark:bg-navy-900 dark:border-navy-700">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-navy-100 dark:bg-navy-700 text-navy-500 dark:text-navy-300">
+                  <Fingerprint className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="font-semibold text-navy-900 dark:text-white">
+                    Biometric login
+                  </h2>
+                  <p className="text-sm text-navy-500 dark:text-navy-400">
+                    {user?.isBiometricRegistered
+                      ? "Fingerprint or face ID is set up on this account."
+                      : "Sign in and confirm votes with your device's fingerprint or face ID instead of a code."}
+                  </p>
+                </div>
+              </div>
+              {user?.isBiometricRegistered ? (
+                <span className="flex items-center gap-1.5 rounded-full bg-teal-50 px-3 py-1 text-xs font-medium text-teal-700 dark:bg-teal-900/30 dark:text-teal-400">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Enabled
+                </span>
+              ) : (
+                <Button
+                  variant="secondary"
+                  loading={biometricLoading}
+                  onClick={handleEnableBiometric}
+                >
+                  Set up
+                </Button>
+              )}
             </div>
           </Card>
         </motion.div>

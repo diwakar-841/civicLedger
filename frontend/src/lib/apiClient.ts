@@ -53,6 +53,12 @@ apiClient.interceptors.response.use(
     }
 
     if (_isRefreshing) {
+      // Mark this follower request as already retried *before* queueing it.
+      // Without this, if the retried request comes back with another 401,
+      // it would re-enter this interceptor with `_retry` still unset and
+      // could kick off a second, redundant refresh cycle instead of simply
+      // failing.
+      originalRequest._retry = true;
       return new Promise((resolve, reject) => {
         _refreshQueue.push((token) => {
           if (token) {

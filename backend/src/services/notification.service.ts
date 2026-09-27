@@ -1,4 +1,4 @@
-import { db } from "@voting/database";
+import { db, elections, groupMembers, users } from "@voting/database";
 import {
   notifications,
   notificationSettings,
@@ -77,21 +77,38 @@ export const notificationService = {
       );
   },
 
+  // Notifies everyone *eligible* to have taken part in this election — not
+  // just people who actually voted. The old version only queried
+  // votes_cache, so non-voters (often the majority, and exactly the people
+  // most likely to want a nudge that results are out) never got notified.
   async notifyElectionParticipants(
     electionId: string,
     title: string,
     message: string,
   ) {
-    const participants = await db.execute(sql`
-      SELECT DISTINCT voter_user_id
-      FROM votes_cache
-      WHERE election_id = ${electionId}
-        AND voter_user_id IS NOT NULL
-    `);
-    const rows = (participants as any).rows ?? participants;
-    for (const participant of rows as Array<{ voter_user_id: string }>) {
+    const election = await db.query.elections.findFirst({
+      where: eq(elections.id, electionId),
+    });
+    if (!election) return;
+
+    let recipientIds: string[];
+    if (election.electionType === "group" && election.groupId) {
+      const members = await db
+        .select({ userId: groupMembers.userId })
+        .from(groupMembers)
+        .where(eq(groupMembers.groupId, election.groupId));
+      recipientIds = members.map((m) => m.userId);
+    } else {
+      const voters = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.isVerified, true));
+      recipientIds = voters.map((v) => v.id);
+    }
+
+    for (const userId of recipientIds) {
       await this.createNotification(
-        participant.voter_user_id,
+        userId,
         "resultsAnnounced",
         `Results announced — ${title}`,
         message,

@@ -11,6 +11,7 @@ export interface User {
   phoneVerified?: boolean;
   isTwoFactorEnabled: boolean;
   isBiometricRegistered: boolean;
+  hasVotingPin?: boolean;
   phone?: string | null;
   dob?: string | null;
   bio?: string | null;

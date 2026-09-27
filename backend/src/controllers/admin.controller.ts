@@ -93,6 +93,15 @@ export async function verifyAuditLog(
   }
 }
 
+// Neutralizes CSV/formula injection: a cell whose content starts with
+// =, +, -, @, or a tab/CR is executed as a formula by Excel/Sheets when the
+// exported file is opened, not treated as plain text — regardless of the
+// JSON-style quoting already applied below (that only escapes commas and
+// quotes for CSV parsing, it does nothing against formula interpretation).
+function csvSafe(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+}
+
 export async function exportAuditLogCsv(
   req: AuthedRequest,
   res: Response,
@@ -124,11 +133,11 @@ export async function exportAuditLogCsv(
       .map((r) =>
         [
           r.id,
-          JSON.stringify(r.actor),
-          JSON.stringify(r.action),
-          JSON.stringify(JSON.stringify(r.metadata ?? {})),
-          JSON.stringify(r.txHash ?? ""),
-          JSON.stringify(r.ipAddress ?? ""),
+          JSON.stringify(csvSafe(r.actor)),
+          JSON.stringify(csvSafe(r.action)),
+          JSON.stringify(csvSafe(JSON.stringify(r.metadata ?? {}))),
+          JSON.stringify(csvSafe(r.txHash ?? "")),
+          JSON.stringify(csvSafe(r.ipAddress ?? "")),
           r.createdAt.toISOString(),
           r.hash ?? "",
         ].join(","),

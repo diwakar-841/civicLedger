@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { logger } from "../lib/logger";
 import { db } from "../../../database/index";
 import { users } from "../../../database/schema/users";
 import { eq } from "drizzle-orm";
@@ -38,7 +39,7 @@ router.get(
 
       res.json(user);
     } catch (error) {
-      console.error("[v0] Error fetching user profile:", error);
+      logger.error("[v0] Error fetching user profile:", { error: String(error) });
       res.status(500).json({ error: "Failed to fetch profile" });
     }
   },
@@ -138,7 +139,7 @@ router.put(
 
       res.json(result[0]);
     } catch (error) {
-      console.error("[v0] Error updating profile:", error);
+      logger.error("[v0] Error updating profile:", { error: String(error) });
       res.status(500).json({ error: "Failed to update profile" });
     }
   },

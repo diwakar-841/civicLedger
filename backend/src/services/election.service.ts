@@ -355,6 +355,27 @@ export async function createElection(
   return election;
 }
 
+/**
+ * The contract has exactly one global `votingOpen` flag and one shared
+ * candidate registry — it does not know about separate elections. So this
+ * app can only ever have ONE election truly "active" on-chain at a time;
+ * letting a second one activate while another is still open would either
+ * silently mix the two elections' candidates together on-chain, or have
+ * one election's close/finalize flip voting off for the other. Used before
+ * every activation attempt (both the immediate-activation path here and
+ * the periodic scheduler) to refuse the second activation instead of
+ * corrupting shared on-chain state.
+ */
+export async function hasOtherActiveElection(
+  excludeElectionId: string,
+): Promise<boolean> {
+  const other = await db.query.elections.findFirst({
+    where: and(eq(elections.status, "active"), ne(elections.id, excludeElectionId)),
+    columns: { id: true },
+  });
+  return Boolean(other);
+}
+
 export async function scheduleElection(
   electionId: string,
   data: {
@@ -442,6 +463,13 @@ export async function scheduleElection(
   // immediate on-chain activation.  For the nomination flow we skip this —
   // the scheduler will activate once it has confirmed ≥ MIN_CANDIDATES.
   if (data.startTime.getTime() <= Date.now() && !data.nominationDeadline) {
+    if (await hasOtherActiveElection(electionId)) {
+      logger.warn(
+        "Skipping immediate activation — another election is already active on-chain",
+        { electionId },
+      );
+      return updated;
+    }
     try {
       const { setElectionOpen } = await import("./blockchain.service");
       await setElectionOpen(true);

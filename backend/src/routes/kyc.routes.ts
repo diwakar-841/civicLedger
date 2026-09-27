@@ -9,6 +9,7 @@ import {
   resendOtpHandler,
   biometricRegisterOptionsHandler,
   biometricRegisterVerifyHandler,
+  biometricSetupTokenHandler,
   biometricLoginChallengeHandler,
   biometricLoginVerifyHandler,
   voteChallengeHandler,
@@ -32,6 +33,10 @@ const identitySchema = z.object({
     .trim()
     .regex(/^(?:\+91)?\d{10}$/, "Phone number must be a valid 10-digit number"),
   dob: z.string().min(1),
+  aadhaar: z
+    .string()
+    .trim()
+    .regex(/^\d{12}$/, "Aadhaar number must be exactly 12 digits"),
 });
 
 const phoneOtpSchema = z.object({
@@ -62,6 +67,11 @@ router.post(
   resendOtpHandler,
 );
 
+router.post(
+  "/biometric/setup-token",
+  requireAuth,
+  biometricSetupTokenHandler,
+);
 router.post(
   "/biometric/register-options",
   kycLimiter,

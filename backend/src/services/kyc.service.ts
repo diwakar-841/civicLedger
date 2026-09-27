@@ -10,6 +10,7 @@ import { recordAudit } from "../lib/audit";
 import { logger } from "../lib/logger";
 import { createSession } from "./session.service";
 import { toVoterId } from "./auth.service";
+import { isValidAadhaar, hashAadhaar } from "./aadhaar.service";
 
 function generateOtp(): string {
   return String(crypto.randomInt(100000, 1000000));
@@ -31,15 +32,16 @@ function normalizePhone(raw: string): string {
   return digits.length === 10 ? `+91${digits}` : raw.trim();
 }
 
-// ─── Step 1: verify DOB + unique phone, send OTP ──────────────────────────────
+// ─── Step 1: verify DOB + Aadhaar + unique phone, send OTP ────────────────────
 export async function verifyIdentity(
   kycToken: string,
   phone: string,
   dob: string,
+  aadhaar: string,
 ) {
   let payload: { userId: string; purpose: string };
   try {
-    payload = jwt.verify(kycToken, env.JWT_SECRET) as {
+    payload = jwt.verify(kycToken, env.JWT_SECRET, { algorithms: ["HS256"] }) as {
       userId: string;
       purpose: string;
     };
@@ -62,6 +64,22 @@ export async function verifyIdentity(
     );
   }
 
+  const normalizedAadhaar = aadhaar.replace(/\D/g, "");
+  if (!isValidAadhaar(normalizedAadhaar)) {
+    throw new BadRequestError(
+      "Please enter a valid 12-digit Aadhaar number",
+    );
+  }
+  const aadhaarHash = hashAadhaar(normalizedAadhaar);
+  const existingAadhaar = await db.query.users.findFirst({
+    where: eq(users.aadhaarHash, aadhaarHash),
+  });
+  if (existingAadhaar && existingAadhaar.id !== user.id) {
+    throw new BadRequestError(
+      "This Aadhaar number is already linked to another account — each person may register only once",
+    );
+  }
+
   const normalizedPhone = normalizePhone(phone);
   const existingPhone = await db.query.users.findFirst({
     where: eq(users.phone, normalizedPhone),
@@ -76,15 +94,28 @@ export async function verifyIdentity(
   const otpHash = await bcrypt.hash(otp, 8);
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
-  await db
-    .update(users)
-    .set({
-      phone: normalizedPhone,
-      phoneVerified: false,
-      phoneVerificationOtpHash: otpHash,
-      phoneVerificationOtpExpiresAt: otpExpiry,
-    })
-    .where(eq(users.id, user.id));
+  try {
+    await db
+      .update(users)
+      .set({
+        phone: normalizedPhone,
+        phoneVerified: false,
+        aadhaarHash,
+        phoneVerificationOtpHash: otpHash,
+        phoneVerificationOtpExpiresAt: otpExpiry,
+      })
+      .where(eq(users.id, user.id));
+  } catch (err: any) {
+    // 23505 = unique_violation — catches the rare race where two requests
+    // pass the "already linked" check above for the same Aadhaar number at
+    // the same time. The DB's unique index on aadhaar_hash is the backstop.
+    if (err?.code === "23505") {
+      throw new BadRequestError(
+        "This Aadhaar number is already linked to another account — each person may register only once",
+      );
+    }
+    throw err;
+  }
 
   let delivered = true;
   try {
@@ -117,7 +148,7 @@ export async function verifyIdentity(
 export async function verifyOtp(kycToken: string, otp: string) {
   let payload: { userId: string; purpose: string };
   try {
-    payload = jwt.verify(kycToken, env.JWT_SECRET) as {
+    payload = jwt.verify(kycToken, env.JWT_SECRET, { algorithms: ["HS256"] }) as {
       userId: string;
       purpose: string;
     };
@@ -182,6 +213,7 @@ export async function verifyOtp(kycToken: string, otp: string) {
       phoneVerified: true,
       isTwoFactorEnabled: user.isTwoFactorEnabled,
       isBiometricRegistered: user.isBiometricRegistered,
+      hasVotingPin: Boolean(user.votingPinHash ?? user.pinHash),
       phone: user.phone,
       dob: user.dob,
     },
@@ -191,7 +223,7 @@ export async function verifyOtp(kycToken: string, otp: string) {
 export async function resendKycOtp(kycToken: string) {
   let payload: { userId: string; purpose: string };
   try {
-    payload = jwt.verify(kycToken, env.JWT_SECRET) as {
+    payload = jwt.verify(kycToken, env.JWT_SECRET, { algorithms: ["HS256"] }) as {
       userId: string;
       purpose: string;
     };

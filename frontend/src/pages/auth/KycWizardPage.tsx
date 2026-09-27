@@ -15,7 +15,7 @@ type Step = "identity" | "otp";
 
 function StepDots({ step }: { step: Step }) {
   const steps: Step[] = ["identity", "otp"];
-  const labels = ["Phone + DOB", "Verify phone"];
+  const labels = ["Identity", "Verify phone"];
   const activeIndex = steps.indexOf(step);
   return (
     <div className="mb-6 flex items-center justify-center gap-2">
@@ -65,6 +65,7 @@ export function KycWizardPage() {
   const [kycToken, setKycToken] = useState("");
   const [phone, setPhone] = useState("");
   const [dob, setDob] = useState("");
+  const [aadhaar, setAadhaar] = useState("");
   const [otp, setOtp] = useState("");
   const [devOtp, setDevOtp] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -103,6 +104,10 @@ export function KycWizardPage() {
       show("Please select your date of birth", "error");
       return;
     }
+    if (!/^\d{12}$/.test(aadhaar)) {
+      show("Please enter your 12-digit Aadhaar number", "error");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -112,6 +117,7 @@ export function KycWizardPage() {
           kycToken,
           phone: `+91${phone}`,
           dob,
+          aadhaar,
         },
       );
       setKycToken(data.kycToken);
@@ -202,7 +208,7 @@ export function KycWizardPage() {
             </h1>
             <p className="mt-1.5 max-w-xs text-sm text-navy-500">
               {step === "identity"
-                ? "Use the phone number and DOB from your registration."
+                ? "Confirm your phone, date of birth, and Aadhaar number."
                 : "Enter the 6-digit code sent to your phone."}
             </p>
           </div>
@@ -263,12 +269,42 @@ export function KycWizardPage() {
                       hint="Must match the date entered during registration"
                     />
 
+                    <div className="flex flex-col gap-1.5">
+                      <label className="flex items-center gap-1.5 text-sm font-medium text-navy-700">
+                        <ShieldCheck className="h-3.5 w-3.5 text-navy-400" />
+                        Aadhaar number
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        maxLength={12}
+                        required
+                        value={aadhaar}
+                        onChange={(event) =>
+                          setAadhaar(
+                            event.target.value.replace(/\D/g, "").slice(0, 12),
+                          )
+                        }
+                        placeholder="12-digit Aadhaar number"
+                        className="focus-ring w-full rounded-lg border border-navy-200 bg-white px-3.5 py-2.5 text-sm text-navy-900 placeholder:text-navy-300"
+                      />
+                      <p className="text-xs text-navy-400">
+                        Used only to confirm you haven't already registered —
+                        each Aadhaar number may back only one account.
+                      </p>
+                    </div>
+
                     <Button
                       type="submit"
                       loading={loading}
                       fullWidth
                       className="mt-2"
-                      disabled={!/^\d{10}$/.test(phone) || !dob}
+                      disabled={
+                        !/^\d{10}$/.test(phone) ||
+                        !dob ||
+                        !/^\d{12}$/.test(aadhaar)
+                      }
                     >
                       Verify details &amp; send code
                     </Button>

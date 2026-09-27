@@ -8,6 +8,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import { groups } from "./groups";
 
 export const electionStatusEnum = pgEnum("election_status", [
   "draft",
@@ -52,7 +53,9 @@ export const elections = pgTable(
 
     isHidden: boolean("is_hidden").notNull().default(false),
     electionType: text("election_type").notNull().default("public"),
-    groupId: uuid("group_id"),
+    groupId: uuid("group_id").references(() => groups.id, {
+      onDelete: "set null",
+    }),
 
     liveResultsEnabled: boolean("live_results_enabled")
       .notNull()

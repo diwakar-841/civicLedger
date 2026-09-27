@@ -163,15 +163,24 @@ export function BallotPage() {
           </div>
         )}
 
-        {status === "active" && !user?.isBiometricRegistered && (
-          <Card className="mb-6 flex items-start gap-3 border-amber-200 bg-amber-50 p-4">
-            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
-            <p className="text-sm text-amber-800">
-              You need to complete biometric setup before voting. Please sign
-              out and sign in again to complete setup.
-            </p>
-          </Card>
-        )}
+        {status === "active" &&
+          !user?.isBiometricRegistered &&
+          !user?.hasVotingPin && (
+            <Card className="mb-6 flex items-start gap-3 border-amber-200 bg-amber-50 p-4">
+              <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
+              <p className="text-sm text-amber-800">
+                You need a way to confirm your vote — set up a{" "}
+                <button
+                  type="button"
+                  onClick={() => navigate("/pin-setup")}
+                  className="font-semibold underline underline-offset-2"
+                >
+                  Voting PIN
+                </button>{" "}
+                or biometric login before voting.
+              </p>
+            </Card>
+          )}
 
         <Card className="p-6 sm:p-8">
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-navy-400">
@@ -198,7 +207,7 @@ export function BallotPage() {
                 selected={selected === c.id}
                 onSelect={() => setSelected(c.id)}
                 onViewDetails={() => setDetailsCandidateId(c.id)}
-                disabled={!canVote || !user?.isBiometricRegistered}
+                disabled={!canVote || (!user?.isBiometricRegistered && !user?.hasVotingPin)}
               />
             ))}
             {visibleCandidates.length === 0 && (
@@ -274,7 +283,7 @@ export function BallotPage() {
           <Button
             fullWidth
             className="mt-4"
-            disabled={!selected || !canVote || !user?.isBiometricRegistered}
+            disabled={!selected || !canVote || (!user?.isBiometricRegistered && !user?.hasVotingPin)}
             loading={voting}
             onClick={() => setShowAuthModal(true)}
           >
@@ -292,7 +301,7 @@ export function BallotPage() {
             setDetailsCandidateId(null);
           }}
           onClose={() => setDetailsCandidateId(null)}
-          disabled={!canVote || !user?.isBiometricRegistered}
+          disabled={!canVote || (!user?.isBiometricRegistered && !user?.hasVotingPin)}
         />
       )}
 

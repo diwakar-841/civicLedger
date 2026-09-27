@@ -18,6 +18,8 @@ import { CandidateRequestModal } from "../components/candidates/CandidateNominat
 import { VoterDetailModal } from "../components/admin/VoterDetailModal";
 import type { VoterSearchResult } from "../hooks/useAdminElections";
 import { useAuthContext } from "../contexts/AuthContext";
+import { useToast } from "../contexts/ToastContext";
+import { formatError } from "../lib/formatError";
 import { useCandidateRequests } from "../hooks/useCandidateRequests";
 import { apiClient } from "../lib/apiClient";
 import { voterDisplayId } from "../lib/idFormat";
@@ -34,6 +36,7 @@ function statusLabel(status: string) {
 
 export function RequestsPage() {
   const { isAdmin } = useAuthContext();
+  const { show } = useToast();
   const navigate = useNavigate();
   const { requests, loading, error, acceptRequest, rejectRequest } =
     useCandidateRequests();
@@ -157,16 +160,23 @@ export function RequestsPage() {
                         <button
                           className="rounded-lg bg-navy-900 px-3 py-2 text-xs font-semibold text-white"
                           onClick={async () => {
-                            await apiClient.put(
-                              `/groups/requests/${r.id}/accept`,
-                            );
-                            setGroupRequests((prev) =>
-                              prev.map((x) =>
-                                x.id === r.id
-                                  ? { ...x, status: "accepted" }
-                                  : x,
-                              ),
-                            );
+                            try {
+                              await apiClient.put(
+                                `/groups/requests/${r.id}/accept`,
+                              );
+                              setGroupRequests((prev) =>
+                                prev.map((x) =>
+                                  x.id === r.id
+                                    ? { ...x, status: "accepted" }
+                                    : x,
+                                ),
+                              );
+                            } catch (err) {
+                              show(
+                                formatError(err, "Could not accept this invitation."),
+                                "error",
+                              );
+                            }
                           }}
                         >
                           Accept
@@ -174,16 +184,23 @@ export function RequestsPage() {
                         <button
                           className="rounded-lg border border-navy-200 bg-white px-3 py-2 text-xs font-semibold text-navy-700"
                           onClick={async () => {
-                            await apiClient.put(
-                              `/groups/requests/${r.id}/reject`,
-                            );
-                            setGroupRequests((prev) =>
-                              prev.map((x) =>
-                                x.id === r.id
-                                  ? { ...x, status: "rejected" }
-                                  : x,
-                              ),
-                            );
+                            try {
+                              await apiClient.put(
+                                `/groups/requests/${r.id}/reject`,
+                              );
+                              setGroupRequests((prev) =>
+                                prev.map((x) =>
+                                  x.id === r.id
+                                    ? { ...x, status: "rejected" }
+                                    : x,
+                                ),
+                              );
+                            } catch (err) {
+                              show(
+                                formatError(err, "Could not decline this invitation."),
+                                "error",
+                              );
+                            }
                           }}
                         >
                           Reject

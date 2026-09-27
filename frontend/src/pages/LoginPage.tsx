@@ -307,7 +307,7 @@ export function LoginPage() {
                           : e.target.value.replace(/\D/g, ""),
                       )
                     }
-                    placeholder={useRecovery ? "xxxxxxxx-xxxx" : "000000"}
+                    placeholder={useRecovery ? "xxxxxxxxxx-xxxxxxxxxx" : "000000"}
                   />
                   <Button type="submit" loading={loading} fullWidth>
                     Verify and continue

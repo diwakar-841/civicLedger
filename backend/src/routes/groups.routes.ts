@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { logger } from "../lib/logger";
 import { requireAdmin, requireAuth } from "../middlewares/auth.middleware";
 import { db } from "../../../database";
 import { notificationService } from "../services/notification.service";
@@ -43,10 +44,7 @@ export async function runGroupMigrations() {
       sql`CREATE UNIQUE INDEX IF NOT EXISTS groups_name_unique_idx ON groups (LOWER(name))`,
     );
   } catch (err) {
-    console.error(
-      "[groups] Could not create unique name index — duplicate group names may exist",
-      err,
-    );
+    logger.error("[groups] Could not create unique name index — duplicate group names may exist", { error: String(err) });
   }
   await runGroupActivityMigrations();
 }

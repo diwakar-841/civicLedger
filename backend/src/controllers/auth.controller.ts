@@ -253,7 +253,10 @@ export async function revokeSession(
   next: NextFunction,
 ) {
   try {
-    await revokeSessionById(req.user!.userId, req.params.id);
+    const revoked = await revokeSessionById(req.user!.userId, req.params.id);
+    if (!revoked) {
+      throw new NotFoundError("Session not found or already revoked");
+    }
     res.json({ message: "Session revoked" });
   } catch (err) {
     next(err);
@@ -310,7 +313,7 @@ export async function enable2fa(
       .update(users)
       .set({
         isTwoFactorEnabled: true,
-        twoFactorRecoveryCodesHash: JSON.stringify(codesHash) as any,
+        twoFactorRecoveryCodesHash: codesHash as any,
       })
       .where(eq(users.id, user.id));
 

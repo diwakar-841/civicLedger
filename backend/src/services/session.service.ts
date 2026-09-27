@@ -110,8 +110,8 @@ export async function revokeSessionByToken(rawToken: string): Promise<boolean> {
 }
 
 export async function revokeSessionById(
-  sessionId: string,
   userId: string,
+  sessionId: string,
 ): Promise<boolean> {
   const session = await db.query.sessions.findFirst({
     where: eq(sessions.id, sessionId),

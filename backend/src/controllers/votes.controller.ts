@@ -16,7 +16,7 @@ export async function vote(
 
     let votePayload: { userId: string; purpose: string };
     try {
-      votePayload = jwt.verify(voteToken, env.JWT_SECRET) as {
+      votePayload = jwt.verify(voteToken, env.JWT_SECRET, { algorithms: ["HS256"] }) as {
         userId: string;
         purpose: string;
       };

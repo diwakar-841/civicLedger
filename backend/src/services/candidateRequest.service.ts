@@ -125,7 +125,7 @@ export const candidateRequestService = {
 
   verifyAcceptAuthToken(token: string, userId: string, requestId: string) {
     try {
-      const payload = jwt.verify(token, env.JWT_SECRET) as {
+      const payload = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] }) as {
         userId: string;
         requestId: string;
         purpose: string;

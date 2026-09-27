@@ -23,7 +23,7 @@ export function requireAuth(
   }
   try {
     const token = header.slice("Bearer ".length);
-    const payload = jwt.verify(token, env.JWT_SECRET) as {
+    const payload = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] }) as {
       userId: string;
       role: "voter" | "admin";
       purpose?: string;
@@ -44,7 +44,7 @@ export function requireKycToken(purpose: string) {
     const token: string | undefined = req.body?.kycToken;
     if (!token) return next(new UnauthorizedError("Missing KYC token"));
     try {
-      const payload = jwt.verify(token, env.JWT_SECRET) as {
+      const payload = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] }) as {
         userId: string;
         purpose: string;
         role: string;
@@ -68,7 +68,7 @@ export function requireSetupToken(
   const token: string | undefined = req.body?.setupToken;
   if (!token) return next(new UnauthorizedError("Missing setup token"));
   try {
-    const payload = jwt.verify(token, env.JWT_SECRET) as {
+    const payload = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] }) as {
       userId: string;
       purpose: string;
       role: string;
@@ -92,7 +92,7 @@ export function optionalAuth(
   if (!header?.startsWith("Bearer ")) return next();
   try {
     const token = header.slice("Bearer ".length);
-    const payload = jwt.verify(token, env.JWT_SECRET) as {
+    const payload = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] }) as {
       userId: string;
       role: "voter" | "admin";
       purpose?: string;

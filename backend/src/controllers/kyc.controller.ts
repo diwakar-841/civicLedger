@@ -8,6 +8,7 @@ import {
 import {
   getRegistrationOptions,
   completeRegistration,
+  createBiometricSetupToken,
   getLoginAuthenticationOptions,
   verifyLoginBiometric,
   getAuthenticationOptions,
@@ -25,8 +26,8 @@ export async function verifyIdentityHandler(
   next: NextFunction,
 ) {
   try {
-    const { kycToken, phone, dob } = req.body;
-    const result = await verifyIdentity(kycToken, phone, dob);
+    const { kycToken, phone, dob, aadhaar } = req.body;
+    const result = await verifyIdentity(kycToken, phone, dob, aadhaar);
     res.json(result);
   } catch (err) {
     next(err);
@@ -70,6 +71,19 @@ export async function biometricRegisterOptionsHandler(
     const { setupToken } = req.body;
     const options = await getRegistrationOptions(setupToken);
     res.json(options);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function biometricSetupTokenHandler(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const setupToken = createBiometricSetupToken(req.user!.userId);
+    res.json({ setupToken });
   } catch (err) {
     next(err);
   }

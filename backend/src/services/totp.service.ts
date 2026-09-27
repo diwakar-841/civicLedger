@@ -68,18 +68,27 @@ export function generateRecoveryCodes(): { plain: string[]; hashes: string[] } {
   const plain: string[] = [];
   const hashes: string[] = [];
   for (let i = 0; i < 8; i++) {
-    const code = crypto.randomBytes(10).toString("hex").toUpperCase();
+    const raw = crypto.randomBytes(10).toString("hex").toUpperCase();
+    // Formatted with a dash (e.g. "3F9A2B1C4D-8E7F6A5B9C") so it's easier to
+    // read, and so that callers who distinguish "is this a recovery code or
+    // a 6-digit TOTP code?" by checking for a dash actually get one.
+    const code = `${raw.slice(0, 10)}-${raw.slice(10)}`;
     plain.push(code);
-    hashes.push(crypto.createHash("sha256").update(code).digest("hex"));
+    hashes.push(hashRecoveryCode(code));
   }
   return { plain, hashes };
+}
+
+function hashRecoveryCode(code: string): string {
+  const normalized = code.trim().toUpperCase();
+  return crypto.createHash("sha256").update(normalized).digest("hex");
 }
 
 export function verifyRecoveryCode(
   code: string,
   storedHashes: string[],
 ): { valid: boolean; remaining: string[] } {
-  const hash = crypto.createHash("sha256").update(code).digest("hex");
+  const hash = hashRecoveryCode(code);
   const idx = storedHashes.indexOf(hash);
   if (idx === -1) return { valid: false, remaining: storedHashes };
   const remaining = storedHashes.filter((_, i) => i !== idx);

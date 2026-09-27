@@ -15,6 +15,7 @@ import {
 import { recordAudit } from "../lib/audit";
 import { logger } from "../lib/logger";
 import { setElectionOpen } from "../services/blockchain.service";
+import { hasOtherActiveElection } from "../services/election.service";
 import { notificationService } from "../services/notification.service";
 import { ADMIN_DECISION_WINDOW_MS } from "../lib/electionTiming";
 
@@ -139,6 +140,18 @@ export function startElectionScheduler() {
             electionId: election.id,
             accepted,
           });
+          continue;
+        }
+
+        if (await hasOtherActiveElection(election.id)) {
+          // The contract only supports one active election at a time
+          // (single global votingOpen flag + shared candidate registry).
+          // Leave this one in "draft" — it'll be picked up again next
+          // cycle once the other election closes.
+          logger.warn(
+            "Skipping activation — another election is already active on-chain",
+            { electionId: election.id },
+          );
           continue;
         }
 

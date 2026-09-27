@@ -35,6 +35,7 @@ function mapUser(user: typeof users.$inferSelect) {
     isVerified: user.isVerified,
     isTwoFactorEnabled: user.isTwoFactorEnabled,
     isBiometricRegistered: user.isBiometricRegistered,
+    hasVotingPin: Boolean(user.votingPinHash ?? user.pinHash),
   };
 }
 
@@ -44,10 +45,23 @@ function getAllowedOrigins(): string[] {
     .filter(Boolean);
 }
 
+// Mints the "biometric-setup" token that getRegistrationOptions() and
+// completeRegistration() require. Nothing in the codebase called this
+// before — biometric-setup routes existed and worked, but there was no way
+// for an already-logged-in user to actually obtain the token they need, so
+// biometric enrollment was unreachable end to end. Called from an
+// authenticated route (Security Settings), since the user already has a
+// valid session at that point.
+export function createBiometricSetupToken(userId: string): string {
+  return jwt.sign({ userId, purpose: "biometric-setup" }, env.JWT_SECRET, {
+    expiresIn: "10m",
+  });
+}
+
 export async function getRegistrationOptions(setupToken: string) {
   let payload: { userId: string; purpose: string };
   try {
-    payload = jwt.verify(setupToken, env.JWT_SECRET) as typeof payload;
+    payload = jwt.verify(setupToken, env.JWT_SECRET, { algorithms: ["HS256"] }) as typeof payload;
   } catch {
     throw new UnauthorizedError("Setup session expired — please sign in again");
   }
@@ -99,7 +113,7 @@ export async function completeRegistration(
 }> {
   let payload: { userId: string; purpose: string };
   try {
-    payload = jwt.verify(setupToken, env.JWT_SECRET) as typeof payload;
+    payload = jwt.verify(setupToken, env.JWT_SECRET, { algorithms: ["HS256"] }) as typeof payload;
   } catch {
     throw new UnauthorizedError("Setup session expired — please sign in again");
   }
@@ -283,7 +297,7 @@ export async function verifyVotePinAuth(
 export async function getLoginAuthenticationOptions(loginToken: string) {
   let payload: { userId: string; purpose: string };
   try {
-    payload = jwt.verify(loginToken, env.JWT_SECRET) as typeof payload;
+    payload = jwt.verify(loginToken, env.JWT_SECRET, { algorithms: ["HS256"] }) as typeof payload;
   } catch {
     throw new UnauthorizedError("Login session expired");
   }
@@ -305,7 +319,7 @@ export async function verifyLoginBiometric(
 }> {
   let payload: { userId: string; purpose: string };
   try {
-    payload = jwt.verify(loginToken, env.JWT_SECRET) as typeof payload;
+    payload = jwt.verify(loginToken, env.JWT_SECRET, { algorithms: ["HS256"] }) as typeof payload;
   } catch {
     throw new UnauthorizedError("Login session expired — please sign in again");
   }

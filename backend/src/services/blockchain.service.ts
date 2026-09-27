@@ -22,8 +22,18 @@ const PRIVATE_KEY = env.DEPLOYER_PRIVATE_KEY;
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
+let sharedProvider: ethers.JsonRpcProvider | undefined;
+
 function getProvider() {
-  return new ethers.JsonRpcProvider(RPC_URL);
+  // Reused across calls instead of constructing a fresh JsonRpcProvider on
+  // every invocation — a single vote cast alone can touch this several
+  // times (eligibility check, contract read, cast, receipt lookup), and
+  // recreating the provider each time throws away its connection/network
+  // detection state for no benefit.
+  if (!sharedProvider) {
+    sharedProvider = new ethers.JsonRpcProvider(RPC_URL);
+  }
+  return sharedProvider;
 }
 
 function getContract(withSigner = false) {
@@ -279,7 +289,12 @@ export function getPublicContractInfo() {
 }
 
 export function listenForVoteEvents(
-  onVote: (voter: string, candidateId: number, txHash: string) => void,
+  onVote: (
+    voter: string,
+    candidateId: number,
+    txHash: string,
+    blockNumber: number,
+  ) => void,
 ) {
   const contract = getContract(false);
   contract.on(
@@ -287,9 +302,14 @@ export function listenForVoteEvents(
     (
       voter: string,
       candidateId: bigint,
-      event: { log: { transactionHash: string } },
+      event: { log: { transactionHash: string; blockNumber: number } },
     ) => {
-      onVote(voter, Number(candidateId), event.log.transactionHash);
+      onVote(
+        voter,
+        Number(candidateId),
+        event.log.transactionHash,
+        event.log.blockNumber,
+      );
     },
   );
 }
