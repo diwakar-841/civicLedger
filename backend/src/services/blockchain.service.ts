@@ -45,7 +45,32 @@ function getContract(withSigner = false) {
   return new ethers.Contract(CONTRACT_ADDRESS, VOTING_ABI, provider);
 }
 
+/**
+ * Every admin transaction (registerVoter, registerCandidate, setElectionOpen)
+ * is signed by the same deployer key, and getContract(true) builds a fresh
+ * Wallet each time, so two concurrent requests both ask the node for the
+ * "pending" nonce and can receive the same value - one of the transactions
+ * then fails with "nonce too low" / "replacement transaction underpriced".
+ * This serialises deployer transactions so nonces are always sequential.
+ */
+let deployerQueue: Promise<unknown> = Promise.resolve();
+
+function withDeployerLock<T>(task: () => Promise<T>): Promise<T> {
+  const run = deployerQueue.then(task, task);
+  // Keep the chain alive regardless of this task's outcome.
+  deployerQueue = run.catch(() => undefined);
+  return run;
+}
+
 export async function fundDeployerIfNeeded(): Promise<void> {
+  // Warn about a missing deployment in every environment (this check used to
+  // sit at the bottom of the function and was skipped by the early returns).
+  if (CONTRACT_ADDRESS === ZERO_ADDRESS) {
+    logger.warn(
+      "VOTING_CONTRACT_ADDRESS is the zero address — run `node blockchain/compile.js && node blockchain/deploy.js` to deploy the contract, then restart the backend.",
+    );
+  }
+
   if (env.NODE_ENV !== "development") return;
 
   const provider = getProvider();
@@ -80,12 +105,6 @@ export async function fundDeployerIfNeeded(): Promise<void> {
       },
     );
   }
-
-  if (CONTRACT_ADDRESS === ZERO_ADDRESS) {
-    logger.warn(
-      "VOTING_CONTRACT_ADDRESS is the zero address — run `node blockchain/compile.js && node blockchain/deploy.js` to deploy the contract, then restart the backend.",
-    );
-  }
 }
 
 export async function ensureVoterEligible(address: string): Promise<void> {
@@ -100,11 +119,20 @@ export async function ensureVoterEligible(address: string): Promise<void> {
     });
   }
 
-  const signed = getContract(true);
   try {
-    const tx = await signed.registerVoter(address);
-    await tx.wait();
-    logger.info("Voter registered on-chain", { address });
+    await withDeployerLock(async () => {
+      // Re-check inside the lock: a concurrent request may have registered
+      // this address while we were waiting (registerVoter reverts on repeat).
+      try {
+        if (await getContract(false).isEligible(address)) return;
+      } catch {
+        // fall through and attempt registration
+      }
+      const signed = getContract(true);
+      const tx = await signed.registerVoter(address);
+      await tx.wait();
+      logger.info("Voter registered on-chain", { address });
+    });
   } catch (err) {
     logger.error("Failed to register voter on-chain", {
       address,
@@ -315,6 +343,10 @@ export function listenForVoteEvents(
 }
 
 export async function registerCandidateOnChain(name: string): Promise<number> {
+  return withDeployerLock(() => registerCandidateOnChainUnlocked(name));
+}
+
+async function registerCandidateOnChainUnlocked(name: string): Promise<number> {
   const contract = getContract(true);
   try {
     const tx = await (contract as any).registerCandidate(name);
@@ -354,9 +386,11 @@ export async function registerCandidateOnChain(name: string): Promise<number> {
 }
 
 export async function setElectionOpen(isOpen: boolean): Promise<void> {
-  const contract = getContract(true);
-  const tx = await (contract as any).setElectionOpen(isOpen);
-  await tx.wait();
+  await withDeployerLock(async () => {
+    const contract = getContract(true);
+    const tx = await (contract as any).setElectionOpen(isOpen);
+    await tx.wait();
+  });
 }
 
 export async function getOnChainResults(): Promise<number[]> {

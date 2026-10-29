@@ -1,0 +1,852 @@
+import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
+import { db, users } from "@voting/database";
+import { eq } from "drizzle-orm";
+import { env } from "../config/env";
+import {
+  BadRequestError,
+  NotFoundError,
+  UnauthorizedError,
+  LockedError,
+} from "../lib/errors";
+import {
+  assertNotLockedOut,
+  recordFailure,
+  recordSuccess,
+} from "../lib/attemptLimiter";
+import {
+  sendPasswordResetEmail,
+  sendRegistrationOtpEmail,
+  sendVerificationEmail,
+} from "../lib/email";
+import { createSession, revokeAllUserSessions } from "./session.service";
+import { recordAudit } from "../lib/audit";
+import { logger } from "../lib/logger";
+
+function generateOtp(): string {
+  return String(crypto.randomInt(100000, 1000000));
+}
+
+const MAX_LOGIN_FAILURES = 5;
+const LOGIN_LOCK_MS = 15 * 60 * 1000;
+
+const DUMMY_PASSWORD_HASH =
+  "$2a$12$CwTycUXWue0Thq9StjUM0uJ8i8u5FIRcaQCX9SZY0v7Y9lqQ.QW8u";
+
+export function toVoterId(userId: string): string {
+  return "VTR-" + userId.replace(/-/g, "").slice(0, 8).toUpperCase();
+}
+
+function mapUser(user: typeof users.$inferSelect) {
+  return {
+    id: user.id,
+    fullName: user.fullName,
+    email: user.email,
+    role: user.role,
+    voterId: toVoterId(user.id),
+    walletAddress: user.walletAddress,
+    isVerified: user.isVerified,
+    emailVerified: user.emailVerified,
+    phoneVerified: user.phoneVerified,
+    isTwoFactorEnabled: user.isTwoFactorEnabled,
+    isBiometricRegistered: user.isBiometricRegistered,
+    hasVotingPin: Boolean(user.votingPinHash ?? user.pinHash),
+    phone: user.phone,
+    dob: user.dob,
+    bio: user.bio,
+    qualifications: user.qualifications,
+    experience: user.experience,
+    profilePhotoUrl: user.profilePhotoUrl,
+  };
+}
+
+type EmailVerificationMethod = "otp" | "link";
+
+export async function initiateRegistration(
+  body: {
+    fullName: string;
+    email: string;
+    dob: string;
+    emailVerificationMethod?: EmailVerificationMethod;
+  },
+  ipAddress?: string,
+): Promise<{ regToken: string }> {
+  const emailLower = body.email.toLowerCase().trim();
+  const existingEmail = await db.query.users.findFirst({
+    where: eq(users.email, emailLower),
+  });
+  if (existingEmail) {
+    if (existingEmail.isVerified)
+      throw new BadRequestError(
+        "An account with this Gmail address already exists",
+      );
+    if (
+      !existingEmail.registrationExpiresAt ||
+      existingEmail.registrationExpiresAt > new Date()
+    ) {
+      throw new BadRequestError(
+        "A registration is already in progress for this Gmail address",
+      );
+    }
+    await db.delete(users).where(eq(users.id, existingEmail.id));
+  }
+
+  const registrationExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const placeholderHash = await bcrypt.hash(
+    crypto.randomBytes(32).toString("hex"),
+    6,
+  );
+  const emailVerificationMethod = body.emailVerificationMethod ?? "otp";
+  const emailOtp = emailVerificationMethod === "otp" ? generateOtp() : null;
+  const emailOtpHash = emailOtp ? await bcrypt.hash(emailOtp, 8) : null;
+  const verificationToken =
+    emailVerificationMethod === "link"
+      ? crypto.randomBytes(32).toString("hex")
+      : null;
+  const verificationTokenHash = verificationToken
+    ? crypto.createHash("sha256").update(verificationToken).digest("hex")
+    : null;
+
+  const [user] = await db
+    .insert(users)
+    .values({
+      fullName: body.fullName.trim(),
+      email: emailLower,
+      passwordHash: placeholderHash,
+      dob: body.dob,
+      isVerified: false,
+      emailVerified: false,
+      phoneVerified: false,
+      emailVerificationMethod,
+      registrationExpiresAt,
+      emailVerificationTokenHash: verificationTokenHash,
+      emailVerificationExpiresAt: verificationToken
+        ? registrationExpiresAt
+        : null,
+      emailVerificationOtpHash: emailOtpHash,
+      emailVerificationOtpExpiresAt: emailOtp
+        ? new Date(
+            Math.min(
+              registrationExpiresAt.getTime(),
+              Date.now() + 10 * 60 * 1000,
+            ),
+          )
+        : null,
+    })
+    .returning();
+
+  const emailDelivery =
+    emailVerificationMethod === "otp" && emailOtp
+      ? sendRegistrationOtpEmail(user.email, user.fullName, emailOtp)
+      : verificationToken
+        ? sendVerificationEmail(user.email, verificationToken)
+        : Promise.resolve();
+  try {
+    await emailDelivery;
+  } catch (err) {
+    logger.error("Failed to send registration email verification", {
+      userId: user.id,
+      error: String(err),
+    });
+    throw new BadRequestError(
+      "Could not send the Gmail verification message. Please try again.",
+    );
+  }
+
+  if (emailOtp && env.NODE_ENV !== "production") {
+    logger.info(
+      `[Registration email OTP — dev] Code for ${user.email}: ${emailOtp}`,
+    );
+  }
+
+  recordAudit(
+    user.id,
+    "REGISTER_INITIATED",
+    undefined,
+    undefined,
+    ipAddress,
+  ).catch(() => {});
+
+  const regToken = jwt.sign(
+    { userId: user.id, purpose: "reg-email" },
+    env.JWT_SECRET,
+    { expiresIn: "24h" },
+  );
+
+  return { regToken };
+}
+
+export async function setRegistrationPassword(
+  setPasswordToken: string,
+  password: string,
+  ipAddress?: string,
+): Promise<{ voterId: string }> {
+  let payload: { userId: string; purpose: string };
+  try {
+    payload = jwt.verify(setPasswordToken, env.JWT_SECRET, { algorithms: ["HS256"] }) as typeof payload;
+  } catch {
+    throw new UnauthorizedError(
+      "Link has expired — please restart registration or request a new email",
+    );
+  }
+  if (payload.purpose !== "reg-setpwd")
+    throw new UnauthorizedError("Invalid token");
+
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, payload.userId),
+  });
+  if (!user) throw new UnauthorizedError("User not found");
+  if (user.isVerified)
+    throw new BadRequestError("Account is already active — please sign in");
+  if (!user.emailVerified)
+    throw new UnauthorizedError("Please verify your Gmail address first");
+  if (user.registrationExpiresAt && user.registrationExpiresAt < new Date()) {
+    throw new UnauthorizedError("Registration expired — please start again");
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+  await db
+    .update(users)
+    .set({ passwordHash, passwordSetAt: new Date() })
+    .where(eq(users.id, user.id));
+
+  recordAudit(
+    user.id,
+    "REGISTER_PASSWORD_CREATED",
+    undefined,
+    undefined,
+    ipAddress,
+  ).catch(() => {});
+
+  return { voterId: toVoterId(user.id) };
+}
+
+export async function loginUser(
+  email: string,
+  password: string,
+  ipAddress?: string,
+  userAgent?: string,
+) {
+  const user = await db.query.users.findFirst({
+    where: eq(users.email, email.toLowerCase().trim()),
+  });
+
+  // Always run bcrypt (even for unknown emails / locked accounts) so response
+  // timing does not reveal whether the account exists or is locked.
+  const passwordOk = await bcrypt.compare(
+    password,
+    user?.passwordHash ?? DUMMY_PASSWORD_HASH,
+  );
+
+  if (!user) throw new UnauthorizedError("Invalid email or password");
+
+  // The users table has had failed_login_attempts / locked_until columns, but
+  // nothing ever read or wrote them, so passwords could be guessed without
+  // limit beyond the per-IP rate limiter.
+  if (user.lockedUntil && user.lockedUntil > new Date()) {
+    throw new LockedError(
+      "Too many failed sign-in attempts. Please try again later or reset your password.",
+    );
+  }
+
+  if (!passwordOk) {
+    const attempts = (user.failedLoginAttempts ?? 0) + 1;
+    const lock = attempts >= MAX_LOGIN_FAILURES;
+    await db
+      .update(users)
+      .set({
+        failedLoginAttempts: lock ? 0 : attempts,
+        lockedUntil: lock ? new Date(Date.now() + LOGIN_LOCK_MS) : null,
+      })
+      .where(eq(users.id, user.id));
+    if (lock) {
+      recordAudit(
+        user.id,
+        "LOGIN_LOCKED",
+        { minutes: LOGIN_LOCK_MS / 60_000 },
+        undefined,
+        ipAddress,
+      ).catch(() => {});
+    }
+    throw new UnauthorizedError("Invalid email or password");
+  }
+
+  if (user.failedLoginAttempts > 0 || user.lockedUntil) {
+    await db
+      .update(users)
+      .set({ failedLoginAttempts: 0, lockedUntil: null })
+      .where(eq(users.id, user.id));
+  }
+
+  if (!user.isVerified && (!user.emailVerified || !user.passwordSetAt)) {
+    throw new UnauthorizedError(
+      "Please verify your Gmail address and create your password first",
+    );
+  }
+
+  recordAudit(user.id, "LOGIN_ATTEMPT", undefined, undefined, ipAddress).catch(
+    () => {},
+  );
+
+  if (user.isTwoFactorEnabled && user.twoFactorSecretEncrypted) {
+    const challengeToken = jwt.sign(
+      { userId: user.id, purpose: "2fa-challenge" },
+      env.JWT_SECRET,
+      { expiresIn: "10m" },
+    );
+    return { twoFactorRequired: true as const, challengeToken };
+  }
+
+  if (user.isBiometricRegistered) {
+    const loginToken = jwt.sign(
+      { userId: user.id, purpose: "login-bio" },
+      env.JWT_SECRET,
+      { expiresIn: "5m" },
+    );
+    return { biometricLoginRequired: true as const, loginToken };
+  }
+
+  if (!user.isVerified) {
+    const kycToken = jwt.sign(
+      { userId: user.id, purpose: "kyc-1" },
+      env.JWT_SECRET,
+      { expiresIn: "10m" },
+    );
+    return { kycRequired: true as const, kycToken };
+  }
+
+  const { rawToken } = await createSession({
+    userId: user.id,
+    userAgent,
+    ipAddress,
+  });
+  const accessToken = jwt.sign(
+    { userId: user.id, role: user.role },
+    env.JWT_SECRET,
+    { expiresIn: "15m" },
+  );
+  return { accessToken, user: mapUser(user), rawToken };
+}
+
+export async function loginWithPin(
+  loginToken: string,
+  pin: string,
+  ipAddress?: string,
+  userAgent?: string,
+): Promise<{
+  rawToken: string;
+  accessToken: string;
+  user: ReturnType<typeof mapUser>;
+}> {
+  let payload: { userId: string; purpose: string };
+  try {
+    payload = jwt.verify(loginToken, env.JWT_SECRET, { algorithms: ["HS256"] }) as typeof payload;
+  } catch {
+    throw new UnauthorizedError("Login session expired — please sign in again");
+  }
+  if (payload.purpose !== "login-bio")
+    throw new UnauthorizedError("Invalid token purpose");
+
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, payload.userId),
+  });
+  if (!user) throw new UnauthorizedError("User not found");
+
+  if (!user.loginPinHash) {
+    throw new BadRequestError(
+      "Login PIN not set — please use biometric or contact support",
+    );
+  }
+
+  const pinKey = `login-pin:${user.id}`;
+  assertNotLockedOut(pinKey);
+  const pinOk = await bcrypt.compare(pin.trim(), user.loginPinHash);
+  if (!pinOk) {
+    recordFailure(pinKey);
+    throw new UnauthorizedError("Incorrect PIN — please try again");
+  }
+  recordSuccess(pinKey);
+
+  const { rawToken } = await createSession({
+    userId: user.id,
+    userAgent,
+    ipAddress,
+  });
+  const accessToken = jwt.sign(
+    { userId: user.id, role: user.role },
+    env.JWT_SECRET,
+    { expiresIn: "15m" },
+  );
+
+  recordAudit(user.id, "LOGIN_PIN", undefined, undefined, ipAddress).catch(
+    () => {},
+  );
+
+  const fresh = await db.query.users.findFirst({
+    where: eq(users.id, user.id),
+  });
+  return { rawToken, accessToken, user: mapUser(fresh!) };
+}
+
+export async function setupPins(
+  userId: string,
+  loginPin: string,
+  votingPin: string,
+  ipAddress?: string,
+): Promise<void> {
+  if (!/^\d{6}$/.test(loginPin))
+    throw new BadRequestError("Login PIN must be exactly 6 digits");
+  if (!/^\d{6}$/.test(votingPin))
+    throw new BadRequestError("Voting PIN must be exactly 6 digits");
+  if (loginPin === votingPin)
+    throw new BadRequestError("Login PIN and Voting PIN must be different");
+
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (!user) throw new UnauthorizedError("User not found");
+
+  const [loginPinHash, votingPinHash] = await Promise.all([
+    bcrypt.hash(loginPin, 10),
+    bcrypt.hash(votingPin, 10),
+  ]);
+
+  await db
+    .update(users)
+    .set({ loginPinHash, votingPinHash })
+    .where(eq(users.id, userId));
+
+  recordAudit(userId, "PINS_SETUP", undefined, undefined, ipAddress).catch(
+    () => {},
+  );
+}
+
+export async function login2fa(
+  challengeToken: string,
+  code: string,
+  ipAddress?: string,
+  userAgent?: string,
+) {
+  let payload: { userId: string; purpose: string };
+  try {
+    payload = jwt.verify(challengeToken, env.JWT_SECRET, { algorithms: ["HS256"] }) as any;
+  } catch {
+    throw new UnauthorizedError("Challenge token expired or invalid");
+  }
+
+  if (payload.purpose !== "2fa-challenge")
+    throw new UnauthorizedError("Invalid challenge token");
+
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, payload.userId),
+  });
+  if (!user || !user.twoFactorSecretEncrypted)
+    throw new UnauthorizedError("2FA not configured");
+
+  const { decryptSecret, verifyTotpCode, verifyRecoveryCode } =
+    await import("./totp.service");
+
+  const twoFaKey = `login-2fa:${user.id}`;
+  assertNotLockedOut(twoFaKey);
+
+  const isRecovery = code.includes("-");
+  if (isRecovery) {
+    if (!user.twoFactorRecoveryCodesHash)
+      throw new UnauthorizedError("No recovery codes configured");
+    const codesHash: string[] = user.twoFactorRecoveryCodesHash as any;
+
+    const { valid, remaining } = verifyRecoveryCode(code.trim(), codesHash);
+    if (!valid) {
+      recordFailure(twoFaKey);
+      throw new UnauthorizedError("Invalid recovery code");
+    }
+
+    await db
+      .update(users)
+      .set({ twoFactorRecoveryCodesHash: remaining as any })
+      .where(eq(users.id, user.id));
+  } else {
+    const secret = decryptSecret(user.twoFactorSecretEncrypted);
+
+    const valid = await verifyTotpCode(secret, code.trim());
+    if (!valid) {
+      recordFailure(twoFaKey);
+      throw new UnauthorizedError("Invalid authentication code");
+    }
+  }
+  recordSuccess(twoFaKey);
+
+  recordAudit(user.id, "2FA_VERIFIED", undefined, undefined, ipAddress).catch(
+    () => {},
+  );
+
+  if (user.isBiometricRegistered) {
+    const loginToken = jwt.sign(
+      { userId: user.id, purpose: "login-bio" },
+      env.JWT_SECRET,
+      { expiresIn: "5m" },
+    );
+    return { biometricLoginRequired: true as const, loginToken };
+  }
+
+  if (!user.isVerified) {
+    const kycToken = jwt.sign(
+      { userId: user.id, purpose: "kyc-1" },
+      env.JWT_SECRET,
+      { expiresIn: "10m" },
+    );
+    return { kycRequired: true as const, kycToken };
+  }
+
+  // 2FA passed, no biometric step required, and the account is already
+  // verified — this must actually complete the login (previously this
+  // branch was missing entirely, so any verified user with 2FA enabled but
+  // no biometric registered could never finish signing in).
+  const { rawToken } = await createSession({
+    userId: user.id,
+    userAgent,
+    ipAddress,
+  });
+  const accessToken = jwt.sign(
+    { userId: user.id, role: user.role },
+    env.JWT_SECRET,
+    { expiresIn: "15m" },
+  );
+  return { accessToken, user: mapUser(user), rawToken };
+}
+
+export async function getCurrentUser(userId: string) {
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (!user) throw new NotFoundError("User not found");
+  return mapUser(user);
+}
+
+export async function forgotPassword(email: string, ipAddress?: string) {
+  const user = await db.query.users.findFirst({
+    where: eq(users.email, email.toLowerCase().trim()),
+  });
+  if (!user) return;
+
+  const resetToken = crypto.randomBytes(32).toString("hex");
+  const resetTokenHash = crypto
+    .createHash("sha256")
+    .update(resetToken)
+    .digest("hex");
+  const resetExpiry = new Date(Date.now() + 60 * 60 * 1000);
+
+  await db
+    .update(users)
+    .set({
+      passwordResetTokenHash: resetTokenHash,
+      passwordResetExpiresAt: resetExpiry,
+    })
+    .where(eq(users.id, user.id));
+
+  sendPasswordResetEmail(user.email, resetToken).catch((err) =>
+    logger.error("Failed to send password reset email", {
+      userId: user.id,
+      error: String(err),
+    }),
+  );
+
+  recordAudit(
+    user.id,
+    "PASSWORD_RESET_REQUESTED",
+    undefined,
+    undefined,
+    ipAddress,
+  ).catch(() => {});
+}
+
+export async function resetPassword(
+  token: string,
+  newPassword: string,
+  ipAddress?: string,
+) {
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  const user = await db.query.users.findFirst({
+    where: eq(users.passwordResetTokenHash, tokenHash),
+  });
+  if (!user || !user.passwordResetExpiresAt)
+    throw new BadRequestError("Invalid or expired reset link");
+  if (user.passwordResetExpiresAt < new Date())
+    throw new BadRequestError("Reset link has expired");
+
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+  await db
+    .update(users)
+    .set({
+      passwordHash,
+      passwordResetTokenHash: null,
+      passwordResetExpiresAt: null,
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+    })
+    .where(eq(users.id, user.id));
+
+  // A password reset is exactly the moment an attacker's still-valid
+  // session (if there is one) should be killed — otherwise resetting the
+  // password does nothing to remove access someone else already has.
+  await revokeAllUserSessions(user.id);
+
+  recordAudit(user.id, "PASSWORD_RESET", undefined, undefined, ipAddress).catch(
+    () => {},
+  );
+}
+
+async function completeEmailVerification(user: typeof users.$inferSelect) {
+  await db
+    .update(users)
+    .set({
+      emailVerified: true,
+      emailVerificationTokenHash: null,
+      emailVerificationExpiresAt: null,
+      emailVerificationOtpHash: null,
+      emailVerificationOtpExpiresAt: null,
+    })
+    .where(eq(users.id, user.id));
+
+  recordAudit(user.id, "REGISTER_EMAIL_VERIFIED").catch(() => {});
+
+  return {
+    setPasswordToken: jwt.sign(
+      { userId: user.id, purpose: "reg-setpwd" },
+      env.JWT_SECRET,
+      { expiresIn: "15m" },
+    ),
+  };
+}
+
+export async function verifyRegistrationOtp(email: string, otp: string) {
+  const user = await db.query.users.findFirst({
+    where: eq(users.email, email.toLowerCase().trim()),
+  });
+  if (!user || user.emailVerified || user.emailVerificationMethod !== "otp") {
+    throw new BadRequestError("Invalid or expired email verification code");
+  }
+  if (user.registrationExpiresAt && user.registrationExpiresAt < new Date()) {
+    throw new BadRequestError("Registration expired — please start again");
+  }
+  if (!user.emailVerificationOtpHash || !user.emailVerificationOtpExpiresAt) {
+    throw new BadRequestError(
+      "No email verification code found — request a new one",
+    );
+  }
+  if (user.emailVerificationOtpExpiresAt < new Date()) {
+    throw new BadRequestError(
+      "Email verification code has expired — request a new one",
+    );
+  }
+  const otpKey = `reg-email-otp:${user.id}`;
+  assertNotLockedOut(otpKey);
+  if (!(await bcrypt.compare(otp.trim(), user.emailVerificationOtpHash))) {
+    recordFailure(otpKey);
+    throw new BadRequestError("Incorrect email verification code");
+  }
+  recordSuccess(otpKey);
+
+  return completeEmailVerification(user);
+}
+
+export async function verifyEmail(token: string) {
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  const user = await db.query.users.findFirst({
+    where: eq(users.emailVerificationTokenHash, tokenHash),
+  });
+  if (!user) throw new NotFoundError("Invalid or expired verification link");
+  if (
+    user.emailVerificationExpiresAt &&
+    user.emailVerificationExpiresAt < new Date()
+  ) {
+    throw new BadRequestError("Verification link has expired");
+  }
+  if (user.isVerified)
+    throw new BadRequestError("This account is already fully verified");
+
+  return completeEmailVerification(user);
+}
+
+export async function resendVerification(userId: string, ipAddress?: string) {
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (!user) throw new NotFoundError("User not found");
+  if (user.emailVerified)
+    throw new BadRequestError("Email is already verified");
+
+  await sendEmailVerificationChallenge(user);
+  recordAudit(
+    user.id,
+    "REGISTER_EMAIL_VERIFICATION_RESENT",
+    undefined,
+    undefined,
+    ipAddress,
+  ).catch(() => {});
+}
+
+async function sendEmailVerificationChallenge(
+  user: typeof users.$inferSelect,
+  requestedMethod?: EmailVerificationMethod,
+) {
+  const method =
+    requestedMethod ??
+    (user.emailVerificationMethod as EmailVerificationMethod) ??
+    "otp";
+  const registrationExpiry =
+    user.registrationExpiresAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const otp = method === "otp" ? generateOtp() : null;
+  const token =
+    method === "link" ? crypto.randomBytes(32).toString("hex") : null;
+
+  await db
+    .update(users)
+    .set({
+      emailVerificationMethod: method,
+      emailVerificationTokenHash: token
+        ? crypto.createHash("sha256").update(token).digest("hex")
+        : null,
+      emailVerificationExpiresAt: token ? registrationExpiry : null,
+      emailVerificationOtpHash: otp ? await bcrypt.hash(otp, 8) : null,
+      emailVerificationOtpExpiresAt: otp
+        ? new Date(
+            Math.min(registrationExpiry.getTime(), Date.now() + 10 * 60 * 1000),
+          )
+        : null,
+    })
+    .where(eq(users.id, user.id));
+
+  const delivery =
+    method === "otp" && otp
+      ? sendRegistrationOtpEmail(user.email, user.fullName, otp)
+      : token
+        ? sendVerificationEmail(user.email, token)
+        : Promise.resolve();
+  try {
+    await delivery;
+  } catch (err) {
+    logger.error("Failed to resend registration email verification", {
+      userId: user.id,
+      error: String(err),
+    });
+    throw new BadRequestError(
+      "Could not send the Gmail verification message. Please try again.",
+    );
+  }
+
+  if (otp && env.NODE_ENV !== "production") {
+    logger.info(
+      `[Registration email OTP resend — dev] Code for ${user.email}: ${otp}`,
+    );
+  }
+}
+
+export async function resendVerificationByEmail(
+  email: string,
+  requestedMethod?: EmailVerificationMethod,
+  ipAddress?: string,
+) {
+  const user = await db.query.users.findFirst({
+    where: eq(users.email, email.toLowerCase().trim()),
+  });
+  if (
+    !user ||
+    user.emailVerified ||
+    (user.registrationExpiresAt && user.registrationExpiresAt < new Date())
+  )
+    return;
+
+  await sendEmailVerificationChallenge(user, requestedMethod);
+  recordAudit(
+    user.id,
+    "REGISTER_EMAIL_VERIFICATION_RESENT",
+    undefined,
+    undefined,
+    ipAddress,
+  ).catch(() => {});
+}
+
+export async function verifyAdminStepUp(
+  userId: string,
+  password: string,
+  code: string,
+  ipAddress?: string,
+) {
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (!user) throw new NotFoundError("User not found");
+
+  const stepUpKey = `admin-step-up:${user.id}`;
+  assertNotLockedOut(stepUpKey);
+  const passwordOk = await bcrypt.compare(password, user.passwordHash);
+  if (!passwordOk) {
+    recordFailure(stepUpKey);
+    recordAudit(
+      user.id,
+      "ADMIN_STEP_UP_FAILED",
+      { reason: "bad_password" },
+      undefined,
+      ipAddress,
+    ).catch(() => {});
+    throw new UnauthorizedError("Incorrect password");
+  }
+
+  if (!user.isTwoFactorEnabled || !user.twoFactorSecretEncrypted) {
+    throw new UnauthorizedError(
+      "Two-factor authentication must be enabled for this action",
+    );
+  }
+
+  const { decryptSecret, verifyTotpCode } = await import("./totp.service");
+  const secret = decryptSecret(user.twoFactorSecretEncrypted);
+  const codeOk = await verifyTotpCode(secret, code.trim());
+  if (!codeOk) {
+    recordFailure(stepUpKey);
+    recordAudit(
+      user.id,
+      "ADMIN_STEP_UP_FAILED",
+      { reason: "bad_totp" },
+      undefined,
+      ipAddress,
+    ).catch(() => {});
+    throw new UnauthorizedError("Invalid authentication code");
+  }
+
+  recordSuccess(stepUpKey);
+  recordAudit(
+    user.id,
+    "ADMIN_STEP_UP_VERIFIED",
+    undefined,
+    undefined,
+    ipAddress,
+  ).catch(() => {});
+}
+
+export async function verifySessionLoginPin(
+  userId: string,
+  pin: string,
+): Promise<void> {
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (!user) throw new NotFoundError("User not found");
+
+  if (!user.loginPinHash) {
+    throw new UnauthorizedError(
+      "No Login PIN is set on this account — please set one in Security settings",
+    );
+  }
+
+  const sessionPinKey = `session-pin:${userId}`;
+  assertNotLockedOut(sessionPinKey);
+  const ok = await bcrypt.compare(pin.trim(), user.loginPinHash);
+  if (!ok) {
+    recordFailure(sessionPinKey);
+    recordAudit(
+      userId,
+      "ADMIN_PIN_STEPUP_FAILED",
+      {},
+      undefined,
+      undefined,
+    ).catch(() => {});
+    throw new UnauthorizedError("Incorrect PIN — please try again");
+  }
+
+  recordSuccess(sessionPinKey);
+  recordAudit(userId, "ADMIN_PIN_STEPUP_OK", {}, undefined, undefined).catch(
+    () => {},
+  );
+}

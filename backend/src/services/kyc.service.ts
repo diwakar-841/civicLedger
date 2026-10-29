@@ -11,6 +11,11 @@ import { logger } from "../lib/logger";
 import { createSession } from "./session.service";
 import { toVoterId } from "./auth.service";
 import { isValidAadhaar, hashAadhaar } from "./aadhaar.service";
+import {
+  assertNotLockedOut,
+  recordFailure,
+  recordSuccess,
+} from "../lib/attemptLimiter";
 
 function generateOtp(): string {
   return String(crypto.randomInt(100000, 1000000));
@@ -22,9 +27,15 @@ function normalizeDob(raw: string): string {
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
   const dmY = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (dmY) return `${dmY[3]}-${dmY[2]}-${dmY[1]}`;
-  const mdY = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (mdY) return `${mdY[3]}-${mdY[1]}-${mdY[2]}`;
   return trimmed;
+}
+
+// The OTP is echoed back to the client ONLY outside production, and only when
+// SMS delivery did not happen (dev without Twilio). In production a failed SMS
+// send (which an attacker can trigger with a number Twilio rejects) used to
+// hand the OTP straight back in the API response, bypassing phone ownership.
+function otpForClient(delivered: boolean, otp: string): string | undefined {
+  return !delivered && env.NODE_ENV !== "production" ? otp : undefined;
 }
 
 function normalizePhone(raw: string): string {
@@ -55,6 +66,11 @@ export async function verifyIdentity(
     where: eq(users.id, payload.userId),
   });
   if (!user) throw new UnauthorizedError("User not found");
+  if (user.isVerified) {
+    // A leftover kyc-1 token must not let an already-verified account swap
+    // its phone / Aadhaar hash and drop phoneVerified.
+    throw new BadRequestError("This account is already verified");
+  }
 
   const normalizedInputDob = normalizeDob(dob);
   const normalizedStoredDob = normalizeDob(user.dob ?? "");
@@ -140,7 +156,7 @@ export async function verifyIdentity(
   );
   recordAudit(user.id, "PHONE_VERIFICATION_INITIATED").catch(() => {});
 
-  const devOtp = !delivered ? otp : undefined;
+  const devOtp = otpForClient(delivered, otp);
 
   return { kycToken: kycToken2, devOtp };
 }
@@ -174,8 +190,14 @@ export async function verifyOtp(kycToken: string, otp: string) {
     );
   }
 
+  const otpKey = `kyc-phone-otp:${user.id}`;
+  assertNotLockedOut(otpKey);
   const otpOk = await bcrypt.compare(otp.trim(), user.phoneVerificationOtpHash);
-  if (!otpOk) throw new BadRequestError("Incorrect verification code");
+  if (!otpOk) {
+    recordFailure(otpKey);
+    throw new BadRequestError("Incorrect verification code");
+  }
+  recordSuccess(otpKey);
 
   await db
     .update(users)
@@ -201,6 +223,7 @@ export async function verifyOtp(kycToken: string, otp: string) {
 
   return {
     accessToken,
+    rawToken,
     user: {
       id: user.id,
       fullName: user.fullName,
@@ -269,7 +292,7 @@ export async function resendKycOtp(kycToken: string) {
     logger.info(`[Phone OTP resend — dev] Code for ${user.phone}: ${otp}`);
   }
 
-  const devOtp = !delivered ? otp : undefined;
+  const devOtp = otpForClient(delivered, otp);
 
   return { devOtp };
 }

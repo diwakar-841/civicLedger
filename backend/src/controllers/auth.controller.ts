@@ -125,6 +125,16 @@ export async function login2faHandler(
       req.ip,
       req.headers["user-agent"],
     );
+    // When 2FA completes the login, the new session's refresh token must go
+    // into the httpOnly cookie (exactly like /login does). It used to be
+    // returned in the JSON body instead: the cookie was never set, so the
+    // session could not be refreshed after 15 minutes, and the long-lived
+    // refresh token was exposed to page JavaScript.
+    if ("rawToken" in result) {
+      setRefreshCookie(res, result.rawToken);
+      const { rawToken: _rawToken, ...safeResult } = result;
+      return res.json(safeResult);
+    }
     res.json(result);
   } catch (err) {
     next(err);

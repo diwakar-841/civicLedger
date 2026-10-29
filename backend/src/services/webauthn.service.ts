@@ -24,6 +24,11 @@ import { createSession } from "./session.service";
 import { recordAudit } from "../lib/audit";
 import { and } from "drizzle-orm";
 import { candidateRequestService } from "./candidateRequest.service";
+import {
+  assertNotLockedOut,
+  recordFailure,
+  recordSuccess,
+} from "../lib/attemptLimiter";
 
 function mapUser(user: typeof users.$inferSelect) {
   return {
@@ -281,9 +286,14 @@ export async function verifyVotePinAuth(
     );
   }
 
+  const pinKey = `vote-pin:${userId}`;
+  assertNotLockedOut(pinKey);
   const pinOk = await bcrypt.compare(pin.trim(), hash);
-  if (!pinOk)
+  if (!pinOk) {
+    recordFailure(pinKey);
     throw new UnauthorizedError("Incorrect voting PIN — please try again");
+  }
+  recordSuccess(pinKey);
 
   const voteToken = jwt.sign({ userId, purpose: "vote" }, env.JWT_SECRET, {
     expiresIn: "2m",

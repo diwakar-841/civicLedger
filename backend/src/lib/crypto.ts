@@ -6,8 +6,17 @@ const IV_LEN = 12;
 const TAG_LEN = 16;
 const SALT = "civic-ledger-wallet-v1";
 
+// scrypt is intentionally slow (tens of ms) and scryptSync blocks the event
+// loop. The secret never changes at runtime, so derive each key once.
+const keyCache = new Map<string, Buffer>();
+
 function deriveKey(secret: string): Buffer {
-  return crypto.scryptSync(secret, SALT, KEY_LEN);
+  let key = keyCache.get(secret);
+  if (!key) {
+    key = crypto.scryptSync(secret, SALT, KEY_LEN);
+    keyCache.set(secret, key);
+  }
+  return key;
 }
 
 export function encryptPrivateKey(privateKey: string, secret: string): string {

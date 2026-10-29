@@ -4,7 +4,7 @@ const path = require("path");
 const assert = require("assert");
 const { ethers } = require("ethers");
 
-const RPC_URL = process.env.RPC_URL || "http://127.0.0.1:7545";
+const RPC_URL = process.env.RPC_URL || "http://127.0.0.1:8545";
 
 async function main() {
   const { abi, bytecode } = JSON.parse(

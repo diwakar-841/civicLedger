@@ -42,13 +42,21 @@ export function startIndexer() {
         where: eq(users.walletAddress, voter.toLowerCase()),
       });
 
-      await db.insert(votesCache).values({
-        electionId: candidate.electionId,
-        candidateId: candidate.id,
-        txHash,
-        blockNumber,
-        voterUserId: user?.id ?? null,
-      });
+      // castVote() inserts the same tx_hash right after the receipt arrives,
+      // concurrently with this event. Never fail (or double-insert) on that
+      // race: let the unique tx_hash win and only audit if WE inserted it.
+      const inserted = await db
+        .insert(votesCache)
+        .values({
+          electionId: candidate.electionId,
+          candidateId: candidate.id,
+          txHash,
+          blockNumber,
+          voterUserId: user?.id ?? null,
+        })
+        .onConflictDoNothing()
+        .returning({ id: votesCache.id });
+      if (inserted.length === 0) return;
 
       await recordAudit(
         user?.id ?? "system",

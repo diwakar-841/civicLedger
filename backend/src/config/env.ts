@@ -68,6 +68,7 @@ const envSchema = z
       if (
         !data.EMAILJS_SERVICE_ID ||
         !data.EMAILJS_OTP_TEMPLATE_ID ||
+        !data.EMAILJS_LINK_TEMPLATE_ID ||
         !data.EMAILJS_PUBLIC_KEY ||
         !data.EMAILJS_PRIVATE_KEY
       ) {
@@ -75,7 +76,7 @@ const envSchema = z
           code: z.ZodIssueCode.custom,
           path: ["EMAILJS_SERVICE_ID"],
           message:
-            "EMAILJS_SERVICE_ID, EMAILJS_OTP_TEMPLATE_ID, EMAILJS_PUBLIC_KEY, and EMAILJS_PRIVATE_KEY are required in production",
+            "EMAILJS_SERVICE_ID, EMAILJS_OTP_TEMPLATE_ID, EMAILJS_LINK_TEMPLATE_ID, EMAILJS_PUBLIC_KEY, and EMAILJS_PRIVATE_KEY are required in production (password-reset and verification links use the link template)",
         });
       }
       if (!data.APP_BASE_URL) {

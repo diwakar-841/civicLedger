@@ -2,12 +2,17 @@ import { db } from "@voting/database";
 import { candidateRequests } from "../../../database/schema/candidateRequests";
 import { elections } from "../../../database/schema/elections";
 import { users } from "../../../database/schema/users";
-import { eq, and, lt, desc } from "drizzle-orm";
+import { eq, and, lt, desc, isNull } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env";
 import { BadRequestError, UnauthorizedError } from "../lib/errors";
 import { addCandidate } from "./election.service";
+import {
+  assertNotLockedOut,
+  recordFailure,
+  recordSuccess,
+} from "../lib/attemptLimiter";
 
 export const candidateRequestService = {
   async createRequest(
@@ -112,9 +117,13 @@ export const candidateRequestService = {
         "Login PIN is not set up. Use biometric authentication instead.",
       );
     }
+    const pinKey = `candidate-accept-pin:${userId}`;
+    assertNotLockedOut(pinKey);
     if (!(await bcrypt.compare(pin.trim(), user.loginPinHash))) {
+      recordFailure(pinKey);
       throw new UnauthorizedError("Incorrect Login PIN");
     }
+    recordSuccess(pinKey);
 
     return jwt.sign(
       { userId, requestId, purpose: "candidate-accept" },
@@ -313,22 +322,49 @@ export const candidateRequestService = {
     });
     if (!user) throw new UnauthorizedError("User not found");
 
-    const candidate = await addCandidate(
-      request.electionId,
-      {
-        name: user.fullName,
-        voterUserId: userId,
-        party: profile.party,
-        photoUrl: profile.photoUrl,
-        bio: profile.bio,
-        qualification: profile.qualification,
-        supports: profile.supports,
-      },
-      userId,
-    );
+    // addCandidate() sends an irreversible on-chain transaction. Two
+    // simultaneous submissions (double-click / two tabs) both passed the
+    // profileCompletedAt check above and each registered a candidate. Claim
+    // the submission atomically first; only the winner proceeds.
+    const [claimed] = await db
+      .update(candidateRequests)
+      .set({ profileCompletedAt: new Date(), updatedAt: new Date() })
+      .where(
+        and(
+          eq(candidateRequests.id, requestId),
+          isNull(candidateRequests.profileCompletedAt),
+        ),
+      )
+      .returning({ id: candidateRequests.id });
+    if (!claimed) {
+      throw new BadRequestError(
+        "Your candidate profile has already been submitted",
+      );
+    }
 
-    await this.markProfileCompleted(requestId);
-    return candidate;
+    try {
+      return await addCandidate(
+        request.electionId,
+        {
+          name: user.fullName,
+          voterUserId: userId,
+          party: profile.party,
+          photoUrl: profile.photoUrl,
+          bio: profile.bio,
+          qualification: profile.qualification,
+          supports: profile.supports,
+        },
+        userId,
+      );
+    } catch (err) {
+      // Release the claim so the nominee can retry after a genuine failure
+      // (e.g. the chain node was briefly unreachable).
+      await db
+        .update(candidateRequests)
+        .set({ profileCompletedAt: null, updatedAt: new Date() })
+        .where(eq(candidateRequests.id, requestId));
+      throw err;
+    }
   },
 
   async expireOutdatedRequests() {

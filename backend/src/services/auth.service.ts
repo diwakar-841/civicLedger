@@ -8,7 +8,13 @@ import {
   BadRequestError,
   NotFoundError,
   UnauthorizedError,
+  LockedError,
 } from "../lib/errors";
+import {
+  assertNotLockedOut,
+  recordFailure,
+  recordSuccess,
+} from "../lib/attemptLimiter";
 import {
   sendPasswordResetEmail,
   sendRegistrationOtpEmail,
@@ -21,6 +27,9 @@ import { logger } from "../lib/logger";
 function generateOtp(): string {
   return String(crypto.randomInt(100000, 1000000));
 }
+
+const MAX_LOGIN_FAILURES = 5;
+const LOGIN_LOCK_MS = 15 * 60 * 1000;
 
 const DUMMY_PASSWORD_HASH =
   "$2a$12$CwTycUXWue0Thq9StjUM0uJ8i8u5FIRcaQCX9SZY0v7Y9lqQ.QW8u";
@@ -223,13 +232,52 @@ export async function loginUser(
     where: eq(users.email, email.toLowerCase().trim()),
   });
 
+  // Always run bcrypt (even for unknown emails / locked accounts) so response
+  // timing does not reveal whether the account exists or is locked.
   const passwordOk = await bcrypt.compare(
     password,
     user?.passwordHash ?? DUMMY_PASSWORD_HASH,
   );
 
-  if (!user || !passwordOk)
+  if (!user) throw new UnauthorizedError("Invalid email or password");
+
+  // The users table has had failed_login_attempts / locked_until columns, but
+  // nothing ever read or wrote them, so passwords could be guessed without
+  // limit beyond the per-IP rate limiter.
+  if (user.lockedUntil && user.lockedUntil > new Date()) {
+    throw new LockedError(
+      "Too many failed sign-in attempts. Please try again later or reset your password.",
+    );
+  }
+
+  if (!passwordOk) {
+    const attempts = (user.failedLoginAttempts ?? 0) + 1;
+    const lock = attempts >= MAX_LOGIN_FAILURES;
+    await db
+      .update(users)
+      .set({
+        failedLoginAttempts: lock ? 0 : attempts,
+        lockedUntil: lock ? new Date(Date.now() + LOGIN_LOCK_MS) : null,
+      })
+      .where(eq(users.id, user.id));
+    if (lock) {
+      recordAudit(
+        user.id,
+        "LOGIN_LOCKED",
+        { minutes: LOGIN_LOCK_MS / 60_000 },
+        undefined,
+        ipAddress,
+      ).catch(() => {});
+    }
     throw new UnauthorizedError("Invalid email or password");
+  }
+
+  if (user.failedLoginAttempts > 0 || user.lockedUntil) {
+    await db
+      .update(users)
+      .set({ failedLoginAttempts: 0, lockedUntil: null })
+      .where(eq(users.id, user.id));
+  }
 
   if (!user.isVerified && (!user.emailVerified || !user.passwordSetAt)) {
     throw new UnauthorizedError(
@@ -311,8 +359,14 @@ export async function loginWithPin(
     );
   }
 
+  const pinKey = `login-pin:${user.id}`;
+  assertNotLockedOut(pinKey);
   const pinOk = await bcrypt.compare(pin.trim(), user.loginPinHash);
-  if (!pinOk) throw new UnauthorizedError("Incorrect PIN — please try again");
+  if (!pinOk) {
+    recordFailure(pinKey);
+    throw new UnauthorizedError("Incorrect PIN — please try again");
+  }
+  recordSuccess(pinKey);
 
   const { rawToken } = await createSession({
     userId: user.id,
@@ -391,6 +445,9 @@ export async function login2fa(
   const { decryptSecret, verifyTotpCode, verifyRecoveryCode } =
     await import("./totp.service");
 
+  const twoFaKey = `login-2fa:${user.id}`;
+  assertNotLockedOut(twoFaKey);
+
   const isRecovery = code.includes("-");
   if (isRecovery) {
     if (!user.twoFactorRecoveryCodesHash)
@@ -398,7 +455,10 @@ export async function login2fa(
     const codesHash: string[] = user.twoFactorRecoveryCodesHash as any;
 
     const { valid, remaining } = verifyRecoveryCode(code.trim(), codesHash);
-    if (!valid) throw new UnauthorizedError("Invalid recovery code");
+    if (!valid) {
+      recordFailure(twoFaKey);
+      throw new UnauthorizedError("Invalid recovery code");
+    }
 
     await db
       .update(users)
@@ -408,8 +468,12 @@ export async function login2fa(
     const secret = decryptSecret(user.twoFactorSecretEncrypted);
 
     const valid = await verifyTotpCode(secret, code.trim());
-    if (!valid) throw new UnauthorizedError("Invalid authentication code");
+    if (!valid) {
+      recordFailure(twoFaKey);
+      throw new UnauthorizedError("Invalid authentication code");
+    }
   }
+  recordSuccess(twoFaKey);
 
   recordAudit(user.id, "2FA_VERIFIED", undefined, undefined, ipAddress).catch(
     () => {},
@@ -514,6 +578,8 @@ export async function resetPassword(
       passwordHash,
       passwordResetTokenHash: null,
       passwordResetExpiresAt: null,
+      failedLoginAttempts: 0,
+      lockedUntil: null,
     })
     .where(eq(users.id, user.id));
 
@@ -570,9 +636,13 @@ export async function verifyRegistrationOtp(email: string, otp: string) {
       "Email verification code has expired — request a new one",
     );
   }
+  const otpKey = `reg-email-otp:${user.id}`;
+  assertNotLockedOut(otpKey);
   if (!(await bcrypt.compare(otp.trim(), user.emailVerificationOtpHash))) {
+    recordFailure(otpKey);
     throw new BadRequestError("Incorrect email verification code");
   }
+  recordSuccess(otpKey);
 
   return completeEmailVerification(user);
 }
@@ -701,8 +771,11 @@ export async function verifyAdminStepUp(
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
   if (!user) throw new NotFoundError("User not found");
 
+  const stepUpKey = `admin-step-up:${user.id}`;
+  assertNotLockedOut(stepUpKey);
   const passwordOk = await bcrypt.compare(password, user.passwordHash);
   if (!passwordOk) {
+    recordFailure(stepUpKey);
     recordAudit(
       user.id,
       "ADMIN_STEP_UP_FAILED",
@@ -723,6 +796,7 @@ export async function verifyAdminStepUp(
   const secret = decryptSecret(user.twoFactorSecretEncrypted);
   const codeOk = await verifyTotpCode(secret, code.trim());
   if (!codeOk) {
+    recordFailure(stepUpKey);
     recordAudit(
       user.id,
       "ADMIN_STEP_UP_FAILED",
@@ -733,6 +807,7 @@ export async function verifyAdminStepUp(
     throw new UnauthorizedError("Invalid authentication code");
   }
 
+  recordSuccess(stepUpKey);
   recordAudit(
     user.id,
     "ADMIN_STEP_UP_VERIFIED",
@@ -755,8 +830,11 @@ export async function verifySessionLoginPin(
     );
   }
 
+  const sessionPinKey = `session-pin:${userId}`;
+  assertNotLockedOut(sessionPinKey);
   const ok = await bcrypt.compare(pin.trim(), user.loginPinHash);
   if (!ok) {
+    recordFailure(sessionPinKey);
     recordAudit(
       userId,
       "ADMIN_PIN_STEPUP_FAILED",
@@ -767,6 +845,7 @@ export async function verifySessionLoginPin(
     throw new UnauthorizedError("Incorrect PIN — please try again");
   }
 
+  recordSuccess(sessionPinKey);
   recordAudit(userId, "ADMIN_PIN_STEPUP_OK", {}, undefined, undefined).catch(
     () => {},
   );

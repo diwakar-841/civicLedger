@@ -46,6 +46,13 @@ export async function bindWallet(
   signature: string,
 ) {
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (user?.walletAddress) {
+    // Re-binding would swap walletAddress while leaving any server-managed
+    // encrypted key (and the old on-chain eligibility / hasVoted state)
+    // behind, so votes would then be signed by a different address than the
+    // one on record.
+    throw new ConflictError("A wallet is already linked to your account");
+  }
   if (!user?.walletNonce) {
     throw new ConflictError("Request a signing message first");
   }
@@ -105,9 +112,15 @@ export async function generateServerWallet(
     env.WALLET_ENCRYPTION_KEY,
   );
 
-  await db.execute(
-    sql`UPDATE users SET wallet_address = ${address}, encrypted_private_key = ${encryptedKey}, wallet_nonce = NULL WHERE id = ${userId}`,
+  // Conditional update: two concurrent "generate wallet" calls would both
+  // pass the check above and the second would silently overwrite the first
+  // wallet's encrypted key. Only the call that wins this UPDATE proceeds.
+  const claimed = await db.execute(
+    sql`UPDATE users SET wallet_address = ${address}, encrypted_private_key = ${encryptedKey}, wallet_nonce = NULL WHERE id = ${userId} AND wallet_address IS NULL RETURNING id`,
   );
+  if (!(claimed.rows ?? (claimed as any)).length) {
+    throw new ConflictError("A wallet is already linked to your account");
+  }
 
   // Register the new address as eligible on-chain (deployer signs this call)
   await ensureVoterEligible(address);

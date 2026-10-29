@@ -13,6 +13,13 @@ import * as groups from "./schema/groups";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
+// An idle client that loses its connection (DB restart, network blip) emits
+// "error" on the pool. With no listener Node treats it as an uncaught
+// exception and the whole API process dies.
+pool.on("error", (err) => {
+  console.error("[database] Unexpected error on idle PostgreSQL client:", err);
+});
+
 export const db = drizzle(pool, {
   schema: {
     ...users,

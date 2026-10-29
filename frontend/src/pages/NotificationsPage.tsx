@@ -196,6 +196,7 @@ function NotificationItem({
     (notification.type === "candidateNomination" ||
       notification.type === "nominationAccepted" ||
       notification.type === "nominationRejected" ||
+      notification.type === "nominationDeclined" ||
       notification.type === "nominationExpired" ||
       notification.type === "groupInvitation")
       ? `/requests`

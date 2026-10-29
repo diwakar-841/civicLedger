@@ -30,6 +30,26 @@ export function errorHandler(
     return res.status(err.statusCode).json({ error: err.message });
   }
 
+  // body-parser / express.json errors carry an HTTP status (400 malformed
+  // JSON, 413 payload too large). They are client errors, not server faults.
+  const httpErr = err as { status?: number; statusCode?: number; type?: string };
+  const clientStatus = httpErr?.status ?? httpErr?.statusCode;
+  if (
+    typeof clientStatus === "number" &&
+    clientStatus >= 400 &&
+    clientStatus < 500
+  ) {
+    logger.warn("Client error", { path: req.path, status: clientStatus });
+    return res.status(clientStatus).json({
+      error:
+        httpErr.type === "entity.parse.failed"
+          ? "Malformed JSON in request body"
+          : httpErr.type === "entity.too.large"
+            ? "Request body is too large"
+            : "Bad request",
+    });
+  }
+
   const message = err instanceof Error ? err.message : "Unknown error";
   logger.error(message, {
     path: req.path,

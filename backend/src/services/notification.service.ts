@@ -85,6 +85,11 @@ export const notificationService = {
     electionId: string,
     title: string,
     message: string,
+    // Defaults keep the original "results announced" behaviour. Callers that
+    // announce something else (voting opened, election cancelled, ...) must
+    // pass their own type/heading, otherwise the in-app notification is titled
+    // "Results announced" and links to the results page.
+    opts: { type?: string; heading?: string } = {},
   ) {
     const election = await db.query.elections.findFirst({
       where: eq(elections.id, electionId),
@@ -109,8 +114,8 @@ export const notificationService = {
     for (const userId of recipientIds) {
       await this.createNotification(
         userId,
-        "resultsAnnounced",
-        `Results announced — ${title}`,
+        opts.type ?? "resultsAnnounced",
+        opts.heading ?? `Results announced — ${title}`,
         message,
         electionId,
         { electionId },
@@ -151,9 +156,21 @@ export const notificationService = {
     userId: string,
     settings: { candidateNominationEmails?: boolean; reminderEmails?: boolean },
   ) {
+    // The settings row is created lazily by getOrCreateSettings(). Updating a
+    // user who never opened the settings page matched zero rows, so the API
+    // answered { success: true } while saving nothing.
+    await this.getOrCreateSettings(userId);
+
+    const patch: { candidateNominationEmails?: boolean; reminderEmails?: boolean } =
+      {};
+    if (typeof settings.candidateNominationEmails === "boolean")
+      patch.candidateNominationEmails = settings.candidateNominationEmails;
+    if (typeof settings.reminderEmails === "boolean")
+      patch.reminderEmails = settings.reminderEmails;
+
     await db
       .update(notificationSettings)
-      .set({ ...settings, updatedAt: new Date() })
+      .set({ ...patch, updatedAt: new Date() })
       .where(eq(notificationSettings.userId, userId));
   },
 };

@@ -36,8 +36,31 @@ export async function runVoteMigrations(): Promise<void> {
     logger.error("Vote migrations failed — vote deduplication may not work", {
       error: String(err),
     });
+    return;
+  }
+
+  // DB-level "one vote per voter per election" guarantee. Separate from the
+  // block above because it fails if historical duplicate rows already exist,
+  // and that must not be reported as the column migration failing.
+  try {
+    await db.execute(sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS uniq_votes_cache_election_voter
+        ON votes_cache (election_id, voter_user_id)
+        WHERE voter_user_id IS NOT NULL
+    `);
+  } catch (err) {
+    logger.error(
+      "Could not create unique (election_id, voter_user_id) index on votes_cache — duplicate rows probably exist and must be cleaned up manually",
+      { error: String(err) },
+    );
   }
 }
+
+// A user double-clicking "Confirm vote" (or two tabs) used to start two
+// castVote() runs in parallel: both passed the "already voted?" SELECT before
+// either had inserted a row, and the loser burned gas on a reverting
+// transaction. Serialise per (user, election) inside this process.
+const votesInFlight = new Set<string>();
 
 // ── Cast vote ─────────────────────────────────────────────────────────────────
 
@@ -52,6 +75,26 @@ export async function runVoteMigrations(): Promise<void> {
  *      can display "Voted successfully" on every subsequent load.
  */
 export async function castVote(params: {
+  userId: string;
+  electionId: string;
+  candidateId: string;
+  ipAddress?: string;
+}) {
+  const flightKey = `${params.userId}:${params.electionId}`;
+  if (votesInFlight.has(flightKey)) {
+    throw new ConflictError(
+      "Your vote is already being processed. Please wait a moment.",
+    );
+  }
+  votesInFlight.add(flightKey);
+  try {
+    return await castVoteInner(params);
+  } finally {
+    votesInFlight.delete(flightKey);
+  }
+}
+
+async function castVoteInner(params: {
   userId: string;
   electionId: string;
   candidateId: string;
@@ -173,11 +216,30 @@ export async function castVote(params: {
     onChainCandidateId,
   );
 
-  const insertResult = await db.execute(sql`
-    INSERT INTO votes_cache (election_id, candidate_id, tx_hash, block_number, voter_user_id)
-    VALUES (${params.electionId}, ${params.candidateId}, ${txHash}, ${blockNumber}, ${params.userId})
-    RETURNING *
-  `);
+  // The blockchain event indexer listens for the very same VoteCast event and
+  // may insert this tx's row between `tx.wait()` returning and this INSERT.
+  // A plain INSERT then fails on the unique tx_hash and the voter gets a 500
+  // for a vote that WAS recorded. Upsert instead, making sure the row ends up
+  // linked to this user.
+  let insertResult;
+  try {
+    insertResult = await db.execute(sql`
+      INSERT INTO votes_cache (election_id, candidate_id, tx_hash, block_number, voter_user_id)
+      VALUES (${params.electionId}, ${params.candidateId}, ${txHash}, ${blockNumber}, ${params.userId})
+      ON CONFLICT (tx_hash) DO UPDATE
+        SET voter_user_id = COALESCE(votes_cache.voter_user_id, EXCLUDED.voter_user_id)
+      RETURNING *
+    `);
+  } catch (err: any) {
+    // 23505 on the (election_id, voter_user_id) index: this voter already has
+    // a recorded vote for the election.
+    if (err?.code === "23505") {
+      throw new ConflictError(
+        "You have already voted in this election. Each voter may only vote once.",
+      );
+    }
+    throw err;
+  }
   const cached = (insertResult as any).rows?.[0] ?? (insertResult as any)[0];
 
   await recordAudit(

@@ -170,8 +170,8 @@ router.get("/sessions", requireAuth, listSessions);
 router.delete("/sessions/:id", requireAuth, revokeSession);
 
 router.post("/2fa/setup", requireAuth, setup2fa);
-router.post("/2fa/enable", requireAuth, validate(totpCodeSchema), enable2fa);
-router.post("/2fa/disable", requireAuth, validate(totpCodeSchema), disable2fa);
+router.post("/2fa/enable", requireAuth, authLimiter, validate(totpCodeSchema), enable2fa);
+router.post("/2fa/disable", requireAuth, authLimiter, validate(totpCodeSchema), disable2fa);
 
 router.get("/verify-email/:token", verifyEmailHandler);
 router.post(

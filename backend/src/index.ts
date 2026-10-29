@@ -22,20 +22,25 @@ import { runGroupMigrations } from "./routes/groups.routes";
 const server = app.listen(env.PORT, () => {
   logger.info(`API server running on port ${env.PORT}`);
 
-  runVoteMigrations().catch((err) =>
-    logger.error("runVoteMigrations failed", { error: String(err) }),
-  );
-
-  runCandidateMigrations().catch((err) =>
-    logger.error("runCandidateMigrations failed", { error: String(err) }),
-  );
-
-  runElectionMigrations().catch((err) =>
-    logger.error("runElectionMigrations failed", { error: String(err) }),
-  );
-  runGroupMigrations().catch((err) =>
-    logger.error("runGroupMigrations failed", { error: String(err) }),
-  );
+  // Run the schema migrations one after another. They ALTER the same tables
+  // (elections, candidates, ...) and the group migration creates the `groups`
+  // table that `elections.group_id` references, so firing them in parallel
+  // can deadlock or fail with "tuple concurrently updated".
+  (async () => {
+    const steps: Array<[string, () => Promise<void>]> = [
+      ["runVoteMigrations", runVoteMigrations],
+      ["runCandidateMigrations", runCandidateMigrations],
+      ["runElectionMigrations", runElectionMigrations],
+      ["runGroupMigrations", runGroupMigrations],
+    ];
+    for (const [name, step] of steps) {
+      try {
+        await step();
+      } catch (err) {
+        logger.error(`${name} failed`, { error: String(err) });
+      }
+    }
+  })();
 
   if (env.SKIP_INDEXER) {
     logger.info(
@@ -75,13 +80,23 @@ process.on("unhandledRejection", (reason) => {
 });
 
 process.on("uncaughtException", (error) => {
-  logger.error("Uncaught exception", {
+  // The process is in an undefined state after an uncaught exception, so
+  // continuing to serve requests (as this handler previously did) risks
+  // corrupt state. Log it, then exit and let the supervisor restart us.
+  logger.error("Uncaught exception - shutting down", {
     message: error.message,
     stack: error.stack,
   });
+  setTimeout(() => process.exit(1), 500).unref();
+  server.close(() => process.exit(1));
 });
 
-process.on("SIGTERM", () => {
-  logger.info("SIGTERM received, shutting down gracefully");
+function shutdown(signal: string) {
+  logger.info(`${signal} received, shutting down gracefully`);
+  // Force-exit if open connections never drain.
+  setTimeout(() => process.exit(0), 10_000).unref();
   server.close(() => process.exit(0));
-});
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

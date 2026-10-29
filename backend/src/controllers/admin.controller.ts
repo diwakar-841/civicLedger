@@ -3,6 +3,7 @@ import { AuthedRequest } from "../middlewares/auth.middleware";
 import { db, auditLog } from "@voting/database";
 import { desc, eq, and, count, SQL } from "drizzle-orm";
 import { computeHash } from "../lib/audit";
+import { csvRow } from "../lib/csv";
 
 export async function getAuditLog(
   req: AuthedRequest,
@@ -93,15 +94,6 @@ export async function verifyAuditLog(
   }
 }
 
-// Neutralizes CSV/formula injection: a cell whose content starts with
-// =, +, -, @, or a tab/CR is executed as a formula by Excel/Sheets when the
-// exported file is opened, not treated as plain text — regardless of the
-// JSON-style quoting already applied below (that only escapes commas and
-// quotes for CSV parsing, it does nothing against formula interpretation).
-function csvSafe(value: string): string {
-  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
-}
-
 export async function exportAuditLogCsv(
   req: AuthedRequest,
   res: Response,
@@ -129,18 +121,22 @@ export async function exportAuditLogCsv(
     );
 
     const header = "id,actor,action,metadata,txHash,ipAddress,createdAt,hash\n";
+    // csvRow() quotes per RFC 4180 (doubled quotes) and neutralises formula
+    // injection. The previous JSON.stringify() quoting produced \" escapes,
+    // which break CSV parsers on any cell containing a quote - i.e. every
+    // metadata cell, since metadata is JSON.
     const body = rows
       .map((r) =>
-        [
+        csvRow([
           r.id,
-          JSON.stringify(csvSafe(r.actor)),
-          JSON.stringify(csvSafe(r.action)),
-          JSON.stringify(csvSafe(JSON.stringify(r.metadata ?? {}))),
-          JSON.stringify(csvSafe(r.txHash ?? "")),
-          JSON.stringify(csvSafe(r.ipAddress ?? "")),
+          r.actor,
+          r.action,
+          JSON.stringify(r.metadata ?? {}),
+          r.txHash ?? "",
+          r.ipAddress ?? "",
           r.createdAt.toISOString(),
           r.hash ?? "",
-        ].join(","),
+        ]),
       )
       .join("\n");
 

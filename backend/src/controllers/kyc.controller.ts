@@ -41,7 +41,10 @@ export async function verifyOtpHandler(
 ) {
   try {
     const { kycToken, otp } = req.body;
-    const result = await verifyOtp(kycToken, otp);
+    const { rawToken, ...result } = await verifyOtp(kycToken, otp);
+    // verifyOtp() creates a session but its refresh token used to be thrown
+    // away, leaving the freshly verified user with no refresh cookie.
+    setRefreshCookie(res, rawToken);
     res.json(result);
   } catch (err) {
     next(err);

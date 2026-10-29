@@ -7,6 +7,7 @@ import { getNominationStatus } from "../services/nominationStatus.service";
 import {
   setLiveResults,
   setResultsReleaseAt,
+  hasOtherActiveElection,
 } from "../services/election.service";
 import { recordAudit } from "../lib/audit";
 import { logger } from "../lib/logger";
@@ -476,15 +477,18 @@ router.post(
       const startsNow =
         startTime.getTime() <= now.getTime() + START_TIME_GRACE_MS;
 
-      await db
-        .update(candidateRequests)
-        .set({ status: "expired", updatedAt: now })
-        .where(
-          and(
-            eq(candidateRequests.electionId, electionId),
-            eq(candidateRequests.status, "pending"),
-          ),
-        );
+      // The contract has one global "voting open" flag and one shared
+      // candidate list, so only one election can be live at a time. The
+      // scheduler and scheduleElection() both enforce this; this endpoint did
+      // not, so an admin could activate a second election while another was
+      // running - and the first one closing would then switch voting off on
+      // chain underneath the second.
+      if (startsNow && (await hasOtherActiveElection(electionId))) {
+        return res.status(409).json({
+          error:
+            "Another election is currently active. Only one election can be open for voting at a time - wait for it to close, or schedule this one to start after it ends.",
+        });
+      }
 
       try {
         const { setElectionOpen } =
@@ -505,6 +509,20 @@ router.post(
               "Could not open voting on-chain. Please try again in a moment.",
           });
       }
+
+      // Only now that opening voting succeeded is it safe to expire the
+      // remaining pending nominations (previously done BEFORE the on-chain
+      // call, so a failed call left the election in draft with every pending
+      // nomination already destroyed).
+      await db
+        .update(candidateRequests)
+        .set({ status: "expired", updatedAt: now })
+        .where(
+          and(
+            eq(candidateRequests.electionId, electionId),
+            eq(candidateRequests.status, "pending"),
+          ),
+        );
 
       const [updated] = await db
         .update(elections)
@@ -531,6 +549,12 @@ router.post(
         startsNow
           ? `Voting is now open for "${election.title}".`
           : `Voting is scheduled for "${election.title}" at ${startTime.toLocaleString()}.`,
+        {
+          type: startsNow ? "votingOpen" : "votingScheduled",
+          heading: startsNow
+            ? `Voting is open — ${election.title}`
+            : `Voting scheduled — ${election.title}`,
+        },
       );
 
       const withResults =
@@ -762,6 +786,10 @@ const cancelElectionHandler = async (req: Request, res: Response) => {
       electionId,
       election.title,
       `"${election.title}" has been cancelled by the administrator. No voting will take place.`,
+      {
+        type: "electionCancelled",
+        heading: `Election cancelled — ${election.title}`,
+      },
     );
 
     res.json({

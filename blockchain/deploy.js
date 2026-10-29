@@ -1,4 +1,12 @@
 require("dotenv").config();
+// The backend signs every admin call (registerVoter, registerCandidate,
+// setElectionOpen) with backend/.env DEPLOYER_PRIVATE_KEY, and the contract's
+// admin is whoever deploys it. Load that file too; otherwise the contract was
+// deployed by Ganache account 0 and every backend admin call reverted with
+// "VoterRegistry: not admin".
+require("dotenv").config({
+  path: require("path").join(__dirname, "..", "backend", ".env"),
+});
 const fs = require("fs");
 const path = require("path");
 const { ethers } = require("ethers");

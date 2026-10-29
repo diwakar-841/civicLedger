@@ -75,6 +75,9 @@ export async function getOne(
     const election = await getElectionWithCandidates(req.params.id);
     const isAdmin = req.user?.role === "admin";
     if (!isAdmin && election.electionType === "group") {
+      // optionalAuth lets anonymous callers through; binding an undefined
+      // user id into the membership query threw and returned a 500.
+      if (!req.user) throw new NotFoundError("Election not found");
       const membership = await (
         await import("@voting/database")
       ).db.execute(

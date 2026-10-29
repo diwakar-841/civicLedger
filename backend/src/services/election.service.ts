@@ -33,7 +33,7 @@ export async function runCandidateMigrations(): Promise<void> {
       sql`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS supports TEXT`,
     );
     await db.execute(
-      sql`ALTER TABLE candidate_requests ADD COLUMN IF NOT EXISTS profile_completed_at TIMESTAMP`,
+      sql`ALTER TABLE candidate_requests ADD COLUMN IF NOT EXISTS profile_completed_at TIMESTAMPTZ`,
     );
     candidateMigrationDone = true;
     logger.info("Candidate migrations applied (rich profile columns ensured)");
@@ -60,13 +60,13 @@ export async function runElectionMigrations(): Promise<void> {
       sql`ALTER TABLE elections ADD COLUMN IF NOT EXISTS live_results_enabled BOOLEAN NOT NULL DEFAULT false`,
     );
     await db.execute(
-      sql`ALTER TABLE elections ADD COLUMN IF NOT EXISTS results_release_at TIMESTAMP`,
+      sql`ALTER TABLE elections ADD COLUMN IF NOT EXISTS results_release_at TIMESTAMPTZ`,
     );
     await db.execute(
-      sql`ALTER TABLE elections ADD COLUMN IF NOT EXISTS results_published_at TIMESTAMP`,
+      sql`ALTER TABLE elections ADD COLUMN IF NOT EXISTS results_published_at TIMESTAMPTZ`,
     );
     await db.execute(
-      sql`ALTER TABLE elections ADD COLUMN IF NOT EXISTS nomination_deadline TIMESTAMP`,
+      sql`ALTER TABLE elections ADD COLUMN IF NOT EXISTS nomination_deadline TIMESTAMPTZ`,
     );
     await db.execute(
       sql`ALTER TABLE elections ADD COLUMN IF NOT EXISTS nomination_alert_sent BOOLEAN NOT NULL DEFAULT false`,
@@ -240,12 +240,14 @@ export async function adminSearch(
       startTime: e.start_time,
       endTime: e.end_time,
     })),
+    // E-mail addresses are personal data: this search is open to every
+    // signed-in user, so only administrators get to see them.
     users: usrRows.map((u: any) => ({
       kind: "user" as const,
       id: u.id,
       displayId: toDisplayId("VTR", u.id),
       fullName: u.full_name,
-      email: u.email,
+      email: isAdmin ? u.email : null,
       isVerified: u.is_verified,
     })),
     admins: admRows.map((a: any) => ({
@@ -253,7 +255,7 @@ export async function adminSearch(
       id: a.id,
       displayId: toDisplayId("ADM", a.id),
       fullName: a.full_name,
-      email: a.email,
+      email: isAdmin ? a.email : null,
     })),
     groups: grpRows.map((g: any) => ({
       kind: "group" as const,
@@ -389,6 +391,15 @@ export async function scheduleElection(
     where: eq(elections.id, electionId),
   });
   if (!election) throw new NotFoundError("Election not found");
+  if (election.status !== "draft") {
+    // Rescheduling an active / closed / cancelled election would rewrite the
+    // voting window under live voters (or revive a finished election).
+    throw new BadRequestError(
+      "Only draft elections can be scheduled. This election is already " +
+        election.status +
+        ".",
+    );
+  }
 
   if (data.nominationDeadline) {
     const violations = validateElectionTiming({
@@ -855,15 +866,19 @@ export async function deleteElection(electionId: string, actorId: string) {
     );
   }
 
+  await db.transaction(async (tx) => {
+    await tx.delete(votesCache).where(eq(votesCache.electionId, electionId));
+    await tx.delete(candidates).where(eq(candidates.electionId, electionId));
+    await tx.delete(elections).where(eq(elections.id, electionId));
+  });
+
+  // Audit only once the delete has really happened (it used to be recorded
+  // first, so a failed delete still left an "ELECTION_DELETED" entry).
   await recordAudit(actorId, "ELECTION_DELETED", {
     electionId,
     title: election.title,
     status: election.status,
   });
-
-  await db.delete(votesCache).where(eq(votesCache.electionId, electionId));
-  await db.delete(candidates).where(eq(candidates.electionId, electionId));
-  await db.delete(elections).where(eq(elections.id, electionId));
 
   return { deleted: true, electionId };
 }

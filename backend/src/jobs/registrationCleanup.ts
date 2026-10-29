@@ -12,7 +12,13 @@ export async function cleanupUnverifiedRegistrations(): Promise<void> {
 
     const deleted = await db
       .delete(users)
-      .where(and(eq(users.isVerified, false), lt(users.createdAt, cutoff)))
+      .where(
+        and(
+          eq(users.isVerified, false),
+          eq(users.role, "voter"),
+          lt(users.createdAt, cutoff),
+        ),
+      )
       .returning({ id: users.id });
 
     if (deleted.length > 0) {

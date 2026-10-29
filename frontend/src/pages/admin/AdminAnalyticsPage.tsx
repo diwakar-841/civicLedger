@@ -1,3 +1,4 @@
+import { downloadAuthenticatedFile } from "../../lib/download";
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
@@ -69,12 +70,9 @@ export function AdminAnalyticsPage() {
 
   function handleExport() {
     setExporting(true);
-    const base = import.meta.env.VITE_API_URL ?? "";
-    const link = document.createElement("a");
-    link.href = `${base}/results/${id}/export.csv`;
-    link.download = `results-${id}.csv`;
-    link.click();
-    setTimeout(() => setExporting(false), 1500);
+    downloadAuthenticatedFile(`/results/${id}/export.csv`, `results-${id}.csv`)
+      .catch(() => {})
+      .finally(() => setExporting(false));
   }
 
   const barData =

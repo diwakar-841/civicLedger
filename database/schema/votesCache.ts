@@ -5,7 +5,9 @@ import {
   integer,
   timestamp,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { elections } from "./elections";
 import { candidates } from "./candidates";
 import { users } from "./users";
@@ -35,5 +37,10 @@ export const votesCache = pgTable(
       table.voterUserId,
       table.electionId,
     ),
+    // Database-level guarantee of one vote per voter per election (the
+    // application-level SELECT-then-INSERT check alone is racy).
+    uniqueIndex("uniq_votes_cache_election_voter")
+      .on(table.electionId, table.voterUserId)
+      .where(sql`${table.voterUserId} IS NOT NULL`),
   ],
 );

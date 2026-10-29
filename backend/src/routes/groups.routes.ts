@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { safeRouter } from "../lib/asyncRouter";
 import { logger } from "../lib/logger";
 import { requireAdmin, requireAuth } from "../middlewares/auth.middleware";
 import { db } from "../../../database";
@@ -10,7 +10,9 @@ import {
   describeUser,
 } from "../lib/groupActivity";
 
-const router = Router();
+// safeRouter(): handlers here are async without try/catch; any DB error (e.g.
+// an invalid UUID in :groupId) would otherwise hang the request forever.
+const router = safeRouter();
 const rows = (result: any) => result.rows ?? result;
 
 export async function runGroupMigrations() {
@@ -79,6 +81,10 @@ router.post("/", requireAuth, requireAdmin, async (req: any, res) => {
       .json({ error: "Group title must be 2-120 characters" });
   if (!description)
     return res.status(400).json({ error: "Group description is required" });
+  if (description.length > 500)
+    return res
+      .status(400)
+      .json({ error: "Description must be 500 characters or fewer" });
 
   // Case-insensitive duplicate check ("Ward 12" collides with "ward 12") so
   // admins get a clear, friendly error instead of a raw DB constraint
@@ -425,7 +431,20 @@ router.get("/:groupId/members", requireAuth, async (req: any, res) => {
     FROM group_members gm JOIN users u ON u.id=gm.user_id
     WHERE gm.group_id=${req.params.groupId} ORDER BY u.full_name
   `);
-  res.json(rows(result));
+  if (req.user.role === "admin") return res.json(rows(result));
+
+  // Fellow members only get what a roster needs. E-mail, phone number, wallet
+  // address and last-login time of every member were previously readable by
+  // any member of the group.
+  res.json(
+    rows(result).map((m: any) => ({
+      id: m.id,
+      full_name: m.full_name,
+      profile_photo_url: m.profile_photo_url,
+      is_verified: m.is_verified,
+      joined_at: m.joined_at,
+    })),
+  );
 });
 
 router.delete("/:groupId", requireAuth, requireAdmin, async (req: any, res) => {
@@ -435,6 +454,22 @@ router.delete("/:groupId", requireAuth, requireAdmin, async (req: any, res) => {
     ),
   )[0];
   if (!group) return res.status(404).json({ error: "Group not found" });
+
+  // Deleting the group NULLs elections.group_id but leaves election_type =
+  // 'group'. A draft/active election in that state has no electorate: nobody
+  // can see or vote in it, yet an "active" one still occupies the single
+  // on-chain election slot until it times out. Refuse instead.
+  const blocking = rows(
+    await db.execute(
+      sql`SELECT title FROM elections WHERE group_id=${group.id} AND status IN ('draft','active') LIMIT 1`,
+    ),
+  )[0];
+  if (blocking) {
+    return res.status(409).json({
+      error: `This group still has an unfinished election ("${blocking.title}"). Cancel it or wait until it closes before deleting the group.`,
+    });
+  }
+
   await db.execute(
     sql`UPDATE elections SET group_id=NULL WHERE group_id=${group.id}`,
   );

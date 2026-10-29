@@ -28,10 +28,14 @@ async function send(
 
   if (!hasCoreConfig() || !templateId) {
     if (env.NODE_ENV === "production") {
-      logger.warn(
-        "EmailJS not fully configured in production - email not sent (logging instead)",
-        { to },
-      );
+      // Never fall through to "log the message and pretend it was sent" in
+      // production: the params contain OTPs and password-reset links, and the
+      // caller would tell the user an email was delivered when it was not.
+      logger.error("EmailJS is not fully configured - email NOT sent", {
+        to,
+        templateConfigured: Boolean(templateId),
+      });
+      throw new Error("Email delivery is not configured");
     }
     logger.info("Dev email (would be sent in production)", { to, ...params });
     return;

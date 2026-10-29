@@ -52,17 +52,6 @@ async function countAcceptedNominations(electionId: string): Promise<number> {
 
 async function countPendingNominations(electionId: string): Promise<number> {
   const now = new Date();
-  const [{ total }] = await db
-    .select({ total: count() })
-    .from(candidateRequests)
-    .where(
-      and(
-        eq(candidateRequests.electionId, electionId),
-        eq(candidateRequests.status, "pending"),
-
-        isNotNull(candidateRequests.expiresAt),
-      ),
-    );
 
   const pending = await db
     .select({ expiresAt: candidateRequests.expiresAt })
@@ -101,7 +90,12 @@ async function notifyAllAdmins(
 }
 
 export function startElectionScheduler() {
+  // The 10s tick awaits several blockchain transactions; a slow run used to
+  // overlap the next tick and both could activate/close the same election.
+  let lifecycleRunning = false;
   cron.schedule("*/10 * * * * *", async () => {
+    if (lifecycleRunning) return;
+    lifecycleRunning = true;
     try {
       const now = new Date();
 
@@ -256,6 +250,8 @@ export function startElectionScheduler() {
       }
     } catch (err) {
       logger.error("Election scheduler error", { error: String(err) });
+    } finally {
+      lifecycleRunning = false;
     }
   });
 

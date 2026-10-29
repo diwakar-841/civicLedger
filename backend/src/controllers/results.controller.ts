@@ -6,6 +6,9 @@ import {
 } from "../services/election.service";
 import { getElectionSummary } from "../services/results.service";
 import { NotFoundError } from "../lib/errors";
+import { csvRow } from "../lib/csv";
+import { db } from "@voting/database";
+import { sql } from "drizzle-orm";
 
 export async function results(
   req: AuthedRequest,
@@ -18,6 +21,18 @@ export async function results(
     const isAdmin = req.user?.role === "admin";
     if (!isAdmin && (election.isHidden || election.status === "draft")) {
       throw new NotFoundError("Election not found");
+    }
+
+    // Group elections are private to the group. getOne() enforces that, but
+    // the results endpoint did not, so any signed-in user could read a group
+    // election's candidates and (once published) vote counts by id.
+    if (!isAdmin && election.electionType === "group") {
+      const membership = await db.execute(
+        sql`SELECT 1 FROM group_members WHERE group_id=${election.groupId} AND user_id=${req.user!.userId} LIMIT 1`,
+      );
+      if (!((membership as any).rows ?? membership).length) {
+        throw new NotFoundError("Election not found");
+      }
     }
 
     if (!isAdmin && !isResultsPublished(election)) {
@@ -67,12 +82,12 @@ export async function resultsExportCsv(
       `attachment; filename="election-${req.params.id}-results.csv"`,
     );
 
+    // Candidate names/parties are user-supplied text: escape per RFC 4180 and
+    // neutralise spreadsheet formulas (=, +, -, @) so opening the export in
+    // Excel/Sheets cannot execute a malicious name.
     const headers = "id,name,party,votes,percent\n";
     const rows = summary.candidates
-      .map(
-        (c) =>
-          `${c.id},${JSON.stringify(c.name)},${JSON.stringify(c.party ?? "")},${c.votes},${c.percent}`,
-      )
+      .map((c) => csvRow([c.id, c.name, c.party ?? "", c.votes, c.percent]))
       .join("\n");
     res.send(headers + rows);
   } catch (err) {

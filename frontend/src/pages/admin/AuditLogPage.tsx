@@ -1,3 +1,4 @@
+import { downloadAuthenticatedFile } from "../../lib/download";
 import { useState, useEffect, useCallback } from "react";
 import {
   ClipboardList,
@@ -95,12 +96,11 @@ export function AuditLogPage() {
 
   function handleExport() {
     setExporting(true);
-    const base = import.meta.env.VITE_API_URL ?? "";
-    const link = document.createElement("a");
-    link.href = `${base}/admin/audit-log/export.csv`;
-    link.download = "audit-log.csv";
-    link.click();
-    setTimeout(() => setExporting(false), 1500);
+    downloadAuthenticatedFile("/admin/audit-log/export.csv", "audit-log.csv")
+      .catch((err) =>
+        show(formatError(err, "Could not export audit log"), "error"),
+      )
+      .finally(() => setExporting(false));
   }
 
   const fadeIn = {
